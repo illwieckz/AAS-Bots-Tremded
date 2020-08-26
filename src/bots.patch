@@ -1,0 +1,1036 @@
+
+Index: src/game/g_active.c
+===================================================================
+--- src/game/g_active.c	(Revision 940)
++++ src/game/g_active.c	(Arbeitskopie)
+@@ -266,6 +266,9 @@
+       continue; // duplicated
+ 
+     other = &g_entities[ pm->touchents[ i ] ];
++    
++    if( ( ent->r.svFlags & SVF_BOT ) && ( ent->touch ) )
++		ent->touch( ent, other, &trace );
+ 
+     // see G_UnlaggedDetectCollisions(), this is the inverse of that.
+     // if our movement is blocked by another player's real position,
+@@ -363,6 +366,8 @@
+ 
+     if( hit->touch )
+       hit->touch( hit, ent, &trace );
++    if( ( ent->r.svFlags & SVF_BOT ) && ( ent->touch ) )
++      ent->touch( ent, hit, &trace );
+   }
+ }
+ 
+@@ -1733,15 +1738,15 @@
+   // mark the time we got info, so we can display the
+   // phone jack if they don't get any for a while
+   ent->client->lastCmdTime = level.time;
+-
+-  if( !g_synchronousClients.integer )
++  
++  if( !( ent->r.svFlags & SVF_BOT ) && !g_synchronousClients.integer )
+     ClientThink_real( ent );
+ }
+ 
+ 
+ void G_RunClient( gentity_t *ent )
+ {
+-  if( !g_synchronousClients.integer )
++  if( !( ent->r.svFlags & SVF_BOT ) && !g_synchronousClients.integer )
+     return;
+ 
+   ent->client->pers.cmd.serverTime = level.time;
+Index: src/game/ai_human.c
+===================================================================
+--- src/game/ai_human.c	(Revision 0)
++++ src/game/ai_human.c	(Revision 0)
+@@ -0,0 +1,472 @@
++/*
++===========================================================================
++Copyright (C) 1999-2005 Id Software, Inc.
++Copyright (C) 2000-2006 Tim Angus
++
++This file is part of Tremulous.
++
++Tremulous is free software; you can redistribute it
++and/or modify it under the terms of the GNU General Public License as
++published by the Free Software Foundation; either version 2 of the License,
++or (at your option) any later version.
++
++Tremulous is distributed in the hope that it will be
++useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
++MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++GNU General Public License for more details.
++
++You should have received a copy of the GNU General Public License
++along with Tremulous; if not, write to the Free Software
++Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
++===========================================================================
++*/
++
++#include "g_local.h"
++#include "ai_main.h"
++
++typedef enum{
++	HS_SPAWN,
++	HS_GEAR,
++	HS_ATTACK
++}hstates_t;
++
++/*
++==================
++BotAimAtEnemy
++==================
++*/
++void HBotAimAtEnemy(bot_state_t *bs) {
++	int i;
++	vec3_t dir, bestorigin, start;
++	vec3_t mins = {-4,-4,-4}, maxs = {4, 4, 4};
++	aas_entityinfo_t entinfo;
++	bsp_trace_t trace;
++	vec3_t target;
++
++	//if the bot has no enemy
++	if (bs->enemy < 0) {
++		return;
++	}
++	//get the enemy entity information
++	trap_AAS_EntityInfo(bs->enemy, &entinfo);
++	//if this is not a player
++	if (bs->enemy >= MAX_CLIENTS) {
++		
++		//if the buildable is visible
++		VectorCopy(entinfo.origin, target);
++
++		//aim at the building
++		VectorSubtract(target, bs->eye, dir);
++		vectoangles(dir, bs->ideal_viewangles);
++		
++		//set the aim target before trying to attack
++		VectorCopy(target, bs->aimtarget);
++		return;
++	}
++	
++	// todo: add reaction delay (enemysight time)
++
++	//get the enemy entity information
++	trap_AAS_EntityInfo(bs->enemy, &entinfo);
++
++	// todo, predict enemy movement (velocity... lastvisorigin)
++
++	VectorCopy(entinfo.origin, bestorigin);
++	
++	//get the start point shooting from
++	//NOTE: the x and y projectile start offsets are ignored
++	VectorCopy(bs->origin, start);
++	start[2] += bs->cur_ps.viewheight;
++
++	BotAI_Trace(&trace, start, mins, maxs, bestorigin, bs->entitynum, MASK_SHOT);
++	
++	//if the enemy is NOT hit
++	if (trace.fraction <= 1 && trace.ent != entinfo.number) {
++		bestorigin[2] += 16;
++	}
++
++	VectorCopy(bestorigin, bs->aimtarget);
++	
++	//get aim direction
++	VectorSubtract(bestorigin, bs->eye, dir);
++
++	//add some randomness
++	for (i = 0; i < 3; i++) dir[i] += 0.06 * crandom();
++
++	//set the ideal view angles
++	vectoangles(dir, bs->ideal_viewangles);
++	bs->ideal_viewangles[PITCH] = AngleMod(bs->ideal_viewangles[PITCH]);
++	bs->ideal_viewangles[YAW] = AngleMod(bs->ideal_viewangles[YAW]);	
++
++	/*
++	//set the view angles directly
++	if (bs->ideal_viewangles[PITCH] > 180) bs->ideal_viewangles[PITCH] -= 360;
++	VectorCopy(bs->ideal_viewangles, bs->viewangles);
++	trap_EA_View(bs->client, bs->viewangles);
++	*/
++}
++
++/*
++==================
++BotCheckAttack
++==================
++*/
++void HBotCheckAttack(bot_state_t *bs) {
++	float fov;
++	int attackentity;
++	bsp_trace_t bsptrace;
++	vec3_t forward, start, end, dir, angles;
++	bsp_trace_t trace;
++	aas_entityinfo_t entinfo;
++	vec3_t mins = {-8, -8, -8}, maxs = {8, 8, 8};
++
++	attackentity = bs->enemy;
++	//
++	trap_AAS_EntityInfo(attackentity, &entinfo);
++	
++	// if not attacking a player
++	if (attackentity >= MAX_CLIENTS) {
++
++	}
++
++	VectorSubtract(bs->aimtarget, bs->eye, dir);
++
++	if (VectorLengthSquared(dir) < Square(100))
++		fov = 120;
++	else
++		fov = 50;
++	//
++	vectoangles(dir, angles);
++	if (!BotInFieldOfVision(bs->viewangles, fov, angles))
++		return;
++	BotAI_Trace(&bsptrace, bs->eye, NULL, NULL, bs->aimtarget, bs->client, CONTENTS_SOLID|CONTENTS_PLAYERCLIP);
++	if (bsptrace.fraction < 1 && bsptrace.ent != attackentity)
++		return;
++
++	//get the start point shooting from
++	VectorCopy(bs->origin, start);
++	start[2] += bs->cur_ps.viewheight;
++
++	AngleVectors(bs->viewangles, forward, NULL, NULL);
++	//end point aiming at
++	VectorMA(start, 1000, forward, end);
++	//a little back to make sure not inside a very close enemy
++	VectorMA(start, -12, forward, start);
++	BotAI_Trace(&trace, start, mins, maxs, end, bs->entitynum, MASK_SHOT);
++	//if the entity is a client
++	if (trace.ent > 0 && trace.ent <= MAX_CLIENTS) {
++		if (trace.ent != attackentity) {
++			//if a teammate is hit
++			if (BotSameTeam(bs, trace.ent))
++				return;
++		}
++	}
++	
++	// TODO avoid radial damage
++	
++	/*
++	//if fire has to be release to activate weapon
++	if (wi.flags & WFL_FIRERELEASED) {
++		if (bs->flags & BFL_ATTACKED) {
++			trap_EA_Attack(bs->client);
++		}
++	}
++	else {
++	*/
++		trap_EA_Attack(bs->client);
++	/*}
++	bs->flags ^= BFL_ATTACKED;
++	*/
++}
++
++qboolean HBotEquipOK(bot_state_t* bs){
++	if( bs->inventory[BI_WEAPON] == WP_MACHINEGUN ){
++		return bs->inventory[BI_CLIPS];
++	}
++	
++	if( bs->inventory[BI_WEAPON] < WP_MACHINEGUN || bs->inventory[BI_WEAPON] > WP_LUCIFER_CANNON)
++		return qfalse;
++		
++	else return qtrue;
++}
++
++void HBotCheckReload(bot_state_t* bs){
++	if( !bs->inventory[BI_AMMO] && bs->inventory[BI_CLIPS] ){
++		trap_EA_Command(bs->client, "reload");
++	}
++}
++
++void HBotCheckRespawn(bot_state_t* bs){
++	char buf[144];
++
++	//on the spawn queue?
++	//if( bs->cur_ps.pm_flags & PMF_QUEUED) return;
++	
++	// respawned, but not spawned.. send class cmd
++	if( BotIntermission(bs) ){
++		// rifle || ckit || akit
++    	if( BG_WeaponIsAllowed( WP_HBUILD2 ) && BG_FindStagesForWeapon( WP_HBUILD2, g_humanStage.integer ) )
++    		Com_sprintf(buf, sizeof(buf), "class ackit");
++    	else
++    		Com_sprintf(buf, sizeof(buf), "class ckit" );
++    	trap_EA_Command(bs->client, buf );
++    	return;
++	}
++	
++	// trigger respawn if dead
++  	//if( bs->cur_ps.pm_type == PM_DEAD || bs->cur_ps.pm_type == PM_SPECTATOR ){
++	if( bs->inventory[BI_HEALTH] <= 0){
++		trap_EA_Attack(bs->client);
++	}
++}
++
++// armoury AI: buy stuff depending on credits (stage, situation)
++void HBotShop(bot_state_t* bs){
++	trap_EA_Command(bs->client, "sell ckit" );
++	trap_EA_Command(bs->client, "buy rifle" );	
++}
++
++// HBotFindEnemy
++// if enemy is found: set bs->goal and bs->enemy and return qtrue
++
++qboolean HBotFindEnemy(bot_state_t* bs){
++	// return 0 if no alien building can be found
++	
++	// todo: find alien in FOV
++	
++	// go for eggs
++	if( !BotGoalForBuildable( &bs->goal, BA_A_SPAWN ) ){
++		// go for OM
++		if( !BotGoalForBuildable( &bs->goal, BA_A_OVERMIND ) ){
++			// dont do anything
++			BotAddInfo(bs, "enemy", "none");
++			return qfalse;
++		}
++	}
++	
++	bs->enemy = bs->goal.entitynum;
++	BotAddInfo(bs, "enemy", va("# %d", bs->enemy) );
++	return qtrue;
++	
++}
++
++// inventory becomes quite useless, thanks to the BG_Inventory functions..
++void HBotUpdateInventory(bot_state_t* bs){
++	weapon_t i;
++	int ammo, clips;
++	
++	// why exclude WP_HBUILD ?
++	bs->inventory[BI_WEAPON] = WP_NONE;
++	for(i= WP_MACHINEGUN; i <= WP_LUCIFER_CANNON; i++){
++		if( BG_InventoryContainsWeapon( i, bs->cur_ps.stats ) ){
++			bs->inventory[BI_WEAPON] = i;
++			break;
++		}
++	}
++	// ammo and clips
++	BG_UnpackAmmoArray( bs->inventory[BI_WEAPON], bs->cur_ps.ammo, bs->cur_ps.powerups, &ammo, &clips );		// get maximum with BG_FindAmmoForWeapon
++	bs->inventory[BI_AMMO] = ammo;
++	bs->inventory[BI_CLIPS] = clips;
++	
++	bs->inventory[BI_HEALTH] = bs->cur_ps.stats[STAT_HEALTH];
++	bs->inventory[BI_CREDITS] = bs->cur_ps.persistant[ PERS_CREDIT ];
++	bs->inventory[BI_STAMINA] = bs->cur_ps.stats[ STAT_STAMINA ];
++	bs->inventory[BI_GRENADE] = BG_InventoryContainsUpgrade( UP_GRENADE, bs->cur_ps.stats );
++	bs->inventory[BI_MEDKIT] = BG_InventoryContainsUpgrade( UP_MEDKIT, bs->cur_ps.stats );
++	bs->inventory[BI_JETPACK] = BG_InventoryContainsUpgrade( UP_JETPACK, bs->cur_ps.stats );
++	bs->inventory[BI_BATTPACK] = BG_InventoryContainsUpgrade( UP_BATTPACK, bs->cur_ps.stats );
++	bs->inventory[BI_LARMOR] = BG_InventoryContainsUpgrade( UP_LIGHTARMOUR, bs->cur_ps.stats );
++	bs->inventory[BI_HELMET] = BG_InventoryContainsUpgrade( UP_HELMET, bs->cur_ps.stats );
++	bs->inventory[BI_BSUIT] = BG_InventoryContainsUpgrade( UP_BATTLESUIT, bs->cur_ps.stats );
++}
++
++qboolean HBotAttack(bot_state_t* bs){
++	bot_moveresult_t moveresult;
++	vec3_t target, dir;
++	
++	//state transitions
++	
++	// dead -> spawn
++	if( !BotIsAlive(bs) ){
++		bs->state = HS_SPAWN;
++		return qfalse;
++	}
++	
++	// not satisfied with current equip? -> attack!
++	if( !HBotEquipOK(bs) ){
++		bs->state = HS_GEAR;
++		Bot_Print( BPMSG, "low equip");
++		return qfalse;
++	}
++	
++	// report
++	BotAddInfo(bs, "task", "attack");
++	
++	// reload ?
++	HBotCheckReload(bs);
++	
++	// find target
++	if( !HBotFindEnemy(bs) )
++		return qtrue;
++	
++	// shoot if target in sight
++	if( BotEntityVisible(bs->entitynum, bs->eye, bs->viewangles, 360, bs->enemy) ){
++		// aim and check attack
++		HBotAimAtEnemy(bs);
++		HBotCheckAttack(bs);
++	}
++	else{	// move to target
++		
++		bs->tfl = TFL_DEFAULT;
++		BotAddInfo(bs, "action", va("movetogoal %d", trap_AAS_AreaTravelTimeToGoalArea(bs->areanum, bs->cur_ps.origin, bs->goal.areanum, bs->tfl)) );
++		BotSetupForMovement(bs);
++		//move towards the goal
++		trap_BotMoveToGoal(&moveresult, bs->ms, &bs->goal, bs->tfl);
++				
++		if (trap_BotMovementViewTarget(bs->ms, &bs->goal, bs->tfl, 300, target)) {
++			VectorSubtract(target, bs->origin, dir);
++			vectoangles(dir, bs->ideal_viewangles);
++		}
++		
++	}
++	
++	return qtrue;
++}
++
++
++// go for arm and gear up
++qboolean HBotGear(bot_state_t* bs){
++	bot_goal_t goal;
++	bot_moveresult_t moveresult;
++	vec3_t target, dir;
++	
++	//state transitions
++	
++	// dead -> spawn
++	if( !BotIsAlive(bs) ){
++		bs->state = HS_SPAWN;
++		return qfalse;
++	}
++	
++	// satisfied with current equip? -> attack!
++	if( HBotEquipOK(bs) ){
++		bs->state = HS_ATTACK;
++		return qfalse;
++	}
++	
++	// find armory
++	if( !BotGoalForBuildable(&goal, BA_H_ARMOURY) ){
++		BotAddInfo(bs, "botgear", "no armory found");
++		return qtrue;
++	}
++	
++	// find traveltime
++	/*tt = trap_AAS_AreaTravelTimeToGoalArea(bs->areanum, bs->cur_ps.origin, goal.areanum, TFL_DEFAULT);
++	if( !tt){
++		Bot_Print( BPMSG, "botgear: no route to armory found \n");
++		return qtrue;
++	}*/
++	
++	if( G_BuildableRange( bs->cur_ps.origin, 100, BA_H_ARMOURY ) ){
++		// shopping time!
++		HBotShop(bs);
++		BotAddInfo(bs, "task", "shopping!");
++		
++	}
++	else{	// move		
++		//DeleteDebugLines();
++		//DebugLineDouble(bs->eye, goal.origin, 4);
++		//initialize the movement state
++		BotSetupForMovement(bs);
++		//move towards the goal
++		trap_BotMoveToGoal(&moveresult, bs->ms, &goal, bs->tfl);
++				
++		if (trap_BotMovementViewTarget(bs->ms, &goal, bs->tfl, 300, target)) {
++			VectorSubtract(target, bs->origin, dir);
++			vectoangles(dir, bs->ideal_viewangles);
++		}
++	}
++	return qtrue;
++}
++	
++qboolean HBotSpawn(bot_state_t* bs){
++	//state transitions
++	if( BotIsAlive(bs) ){
++		bs->state = HS_GEAR;
++		return qfalse;
++	}
++	
++	HBotCheckRespawn(bs);
++	return qtrue;
++}
++
++// hbotrunstate: return qfalse if state is changed, 
++// so new state can be executed within the same frame
++qboolean HBotRunState(bot_state_t* bs){
++	switch(bs->state){
++		case HS_SPAWN:
++			return HBotSpawn(bs);
++		case HS_GEAR:
++			return HBotGear(bs);
++		case HS_ATTACK:
++			return HBotAttack(bs);
++		default:
++			Bot_Print( BPERROR, "bs->state irregular value %d \n", bs->state);
++			bs->state = HS_SPAWN;
++			return qtrue;
++	}
++	return qtrue;
++}
++
++/*
++==================
++BotHumanAI
++==================
++*/
++void BotHumanAI(bot_state_t *bs, float thinktime) {
++	//char buf[144];
++	
++	/*bot_goal_t goal;
++	bot_moveresult_t moveresult;
++	int tt;
++	vec3_t target, dir;
++	*/
++	//char userinfo[MAX_INFO_STRING];
++
++	//if the bot has just been setup
++	if (bs->setupcount > 0) {
++		bs->setupcount--;
++		if (bs->setupcount > 0) return;
++
++		trap_EA_Command(bs->client, "team humans");
++		//
++		//bs->lastframe_health = bs->inventory[INVENTORY_HEALTH];
++		//bs->lasthitcount = bs->cur_ps.persistant[PERS_HITS];
++		bs->setupcount = 0;
++	}	
++	
++	// update knowledge base and inventory
++	HBotUpdateInventory(bs);
++	
++	// run the FSM
++	bs->statecycles = 0;
++	while( !HBotRunState(bs) ){
++		if( ++(bs->statecycles) > 5){
++			BotAddInfo(bs, "botstates", "loop");
++			break;
++		}
++	}
++	
++	// update the hud
++	if(bot_developer.integer){
++		// fsm state
++		BotAddInfo(bs, "state", va("%d",bs->state) );
++		// weapon
++		BotAddInfo(bs, "weapon", va("%d",bs->inventory[BI_WEAPON]) );
++		// ammo
++		BotAddInfo(bs, "ammo", va("%d",bs->inventory[BI_AMMO]) );
++		
++		// copy config string
++		trap_SetConfigstring( CS_BOTINFOS + bs->client, bs->hudinfo);
++	}
++}
+Index: src/game/g_public.h
+===================================================================
+--- src/game/g_public.h	(Revision 940)
++++ src/game/g_public.h	(Arbeitskopie)
+@@ -35,6 +35,7 @@
+ // https://zerowing.idsoftware.com/bugzilla/show_bug.cgi?id=551
+ #define SVF_CLIENTMASK 0x00000002
+ 
++#define SVF_BOT					0x00000008	// set if the entity is a bot
+ #define SVF_BROADCAST           0x00000020  // send to all connected clients
+ #define SVF_PORTAL              0x00000040  // merge a second pvs at origin2 into snapshots
+ #define SVF_USE_CURRENT_ORIGIN  0x00000080  // entity->r.currentOrigin instead of entity->s.origin
+@@ -221,8 +222,175 @@
+   G_PARSE_FREE_SOURCE,
+   G_PARSE_READ_TOKEN,
+   G_PARSE_SOURCE_FILE_AND_LINE,
++	// access for bots to get and free a server client (FIXME?)
++  G_BOT_ALLOCATE_CLIENT,  // ( void );
++  G_BOT_FREE_CLIENT,  // ( int clientNum );
++  G_DEBUG_POLYGON_CREATE,
++  G_DEBUG_POLYGON_DELETE,
+ 
+-  G_SEND_GAMESTAT
++  G_SEND_GAMESTAT,
++  
++  BOTLIB_SETUP = 200,       // ( void );
++  BOTLIB_SHUTDOWN,        // ( void );
++  BOTLIB_LIBVAR_SET,
++  BOTLIB_LIBVAR_GET,
++  BOTLIB_PC_ADD_GLOBAL_DEFINE,
++  BOTLIB_START_FRAME,
++  BOTLIB_LOAD_MAP,
++  BOTLIB_UPDATENTITY,
++  BOTLIB_TEST,
++
++  BOTLIB_GET_SNAPSHOT_ENTITY,   // ( int client, int ent );
++  BOTLIB_GET_CONSOLE_MESSAGE,   // ( int client, char *message, int size );
++  BOTLIB_USER_COMMAND,      // ( int client, usercmd_t *ucmd );
++
++  BOTLIB_AAS_ENABLE_ROUTING_AREA = 300,
++  BOTLIB_AAS_BBOX_AREAS,
++  BOTLIB_AAS_AREA_INFO,
++  BOTLIB_AAS_ENTITY_INFO,
++
++  BOTLIB_AAS_INITIALIZED,
++  BOTLIB_AAS_PRESENCE_TYPE_BOUNDING_BOX,
++  BOTLIB_AAS_TIME,
++
++  BOTLIB_AAS_POINT_AREA_NUM,
++  BOTLIB_AAS_TRACE_AREAS,
++
++  BOTLIB_AAS_POINT_CONTENTS,
++  BOTLIB_AAS_NEXT_BSP_ENTITY,
++  BOTLIB_AAS_VALUE_FOR_BSP_EPAIR_KEY,
++  BOTLIB_AAS_VECTOR_FOR_BSP_EPAIR_KEY,
++  BOTLIB_AAS_FLOAT_FOR_BSP_EPAIR_KEY,
++  BOTLIB_AAS_INT_FOR_BSP_EPAIR_KEY,
++
++  BOTLIB_AAS_AREA_REACHABILITY,
++
++  BOTLIB_AAS_AREA_TRAVEL_TIME_TO_GOAL_AREA,
++
++  BOTLIB_AAS_SWIMMING,
++  BOTLIB_AAS_PREDICT_CLIENT_MOVEMENT,
++
++
++
++  BOTLIB_EA_SAY = 400,
++  BOTLIB_EA_SAY_TEAM,
++  BOTLIB_EA_COMMAND,
++
++  BOTLIB_EA_ACTION,
++  BOTLIB_EA_GESTURE,
++  BOTLIB_EA_TALK,
++  BOTLIB_EA_ATTACK,
++  BOTLIB_EA_USE,
++  BOTLIB_EA_RESPAWN,
++  BOTLIB_EA_CROUCH,
++  BOTLIB_EA_MOVE_UP,
++  BOTLIB_EA_MOVE_DOWN,
++  BOTLIB_EA_MOVE_FORWARD,
++  BOTLIB_EA_MOVE_BACK,
++  BOTLIB_EA_MOVE_LEFT,
++  BOTLIB_EA_MOVE_RIGHT,
++
++  BOTLIB_EA_SELECT_WEAPON,
++  BOTLIB_EA_JUMP,
++  BOTLIB_EA_DELAYED_JUMP,
++  BOTLIB_EA_MOVE,
++  BOTLIB_EA_VIEW,
++
++  BOTLIB_EA_END_REGULAR,
++  BOTLIB_EA_GET_INPUT,
++  BOTLIB_EA_RESET_INPUT,
++
++
++
++  BOTLIB_AI_LOAD_CHARACTER = 500,
++  BOTLIB_AI_FREE_CHARACTER,
++  BOTLIB_AI_CHARACTERISTIC_FLOAT,
++  BOTLIB_AI_CHARACTERISTIC_BFLOAT,
++  BOTLIB_AI_CHARACTERISTIC_INTEGER,
++  BOTLIB_AI_CHARACTERISTIC_BINTEGER,
++  BOTLIB_AI_CHARACTERISTIC_STRING,
++
++  BOTLIB_AI_ALLOC_CHAT_STATE,
++  BOTLIB_AI_FREE_CHAT_STATE,
++  BOTLIB_AI_QUEUE_CONSOLE_MESSAGE,
++  BOTLIB_AI_REMOVE_CONSOLE_MESSAGE,
++  BOTLIB_AI_NEXT_CONSOLE_MESSAGE,
++  BOTLIB_AI_NUM_CONSOLE_MESSAGE,
++  BOTLIB_AI_INITIAL_CHAT,
++  BOTLIB_AI_REPLY_CHAT,
++  BOTLIB_AI_CHAT_LENGTH,
++  BOTLIB_AI_ENTER_CHAT,
++  BOTLIB_AI_STRING_CONTAINS,
++  BOTLIB_AI_FIND_MATCH,
++  BOTLIB_AI_MATCH_VARIABLE,
++  BOTLIB_AI_UNIFY_WHITE_SPACES,
++  BOTLIB_AI_REPLACE_SYNONYMS,
++  BOTLIB_AI_LOAD_CHAT_FILE,
++  BOTLIB_AI_SET_CHAT_GENDER,
++  BOTLIB_AI_SET_CHAT_NAME,
++
++  BOTLIB_AI_RESET_GOAL_STATE,
++  BOTLIB_AI_RESET_AVOID_GOALS,
++  BOTLIB_AI_PUSH_GOAL,
++  BOTLIB_AI_POP_GOAL,
++  BOTLIB_AI_EMPTY_GOAL_STACK,
++  BOTLIB_AI_DUMP_AVOID_GOALS,
++  BOTLIB_AI_DUMP_GOAL_STACK,
++  BOTLIB_AI_GOAL_NAME,
++  BOTLIB_AI_GET_TOP_GOAL,
++  BOTLIB_AI_GET_SECOND_GOAL,
++  BOTLIB_AI_CHOOSE_LTG_ITEM,
++  BOTLIB_AI_CHOOSE_NBG_ITEM,
++  BOTLIB_AI_TOUCHING_GOAL,
++  BOTLIB_AI_ITEM_GOAL_IN_VIS_BUT_NOT_VISIBLE,
++  BOTLIB_AI_GET_LEVEL_ITEM_GOAL,
++  BOTLIB_AI_AVOID_GOAL_TIME,
++  BOTLIB_AI_INIT_LEVEL_ITEMS,
++  BOTLIB_AI_UPDATE_ENTITY_ITEMS,
++  BOTLIB_AI_LOAD_ITEM_WEIGHTS,
++  BOTLIB_AI_FREE_ITEM_WEIGHTS,
++  BOTLIB_AI_SAVE_GOAL_FUZZY_LOGIC,
++  BOTLIB_AI_ALLOC_GOAL_STATE,
++  BOTLIB_AI_FREE_GOAL_STATE,
++
++  BOTLIB_AI_RESET_MOVE_STATE,
++  BOTLIB_AI_MOVE_TO_GOAL,
++  BOTLIB_AI_MOVE_IN_DIRECTION,
++  BOTLIB_AI_RESET_AVOID_REACH,
++  BOTLIB_AI_RESET_LAST_AVOID_REACH,
++  BOTLIB_AI_REACHABILITY_AREA,
++  BOTLIB_AI_MOVEMENT_VIEW_TARGET,
++  BOTLIB_AI_ALLOC_MOVE_STATE,
++  BOTLIB_AI_FREE_MOVE_STATE,
++  BOTLIB_AI_INIT_MOVE_STATE,
++
++  BOTLIB_AI_CHOOSE_BEST_FIGHT_WEAPON,
++  BOTLIB_AI_GET_WEAPON_INFO,
++  BOTLIB_AI_LOAD_WEAPON_WEIGHTS,
++  BOTLIB_AI_ALLOC_WEAPON_STATE,
++  BOTLIB_AI_FREE_WEAPON_STATE,
++  BOTLIB_AI_RESET_WEAPON_STATE,
++
++  BOTLIB_AI_GENETIC_PARENTS_AND_CHILD_SELECTION,
++  BOTLIB_AI_INTERBREED_GOAL_FUZZY_LOGIC,
++  BOTLIB_AI_MUTATE_GOAL_FUZZY_LOGIC,
++  BOTLIB_AI_GET_NEXT_CAMP_SPOT_GOAL,
++  BOTLIB_AI_GET_MAP_LOCATION_GOAL,
++  BOTLIB_AI_NUM_INITIAL_CHATS,
++  BOTLIB_AI_GET_CHAT_MESSAGE,
++  BOTLIB_AI_REMOVE_FROM_AVOID_GOALS,
++  BOTLIB_AI_PREDICT_VISIBLE_POSITION,
++
++  BOTLIB_AI_SET_AVOID_GOAL_TIME,
++  BOTLIB_AI_ADD_AVOID_SPOT,
++  BOTLIB_AAS_ALTERNATIVE_ROUTE_GOAL,
++  BOTLIB_AAS_PREDICT_ROUTE,
++  BOTLIB_AAS_POINT_REACHABILITY_AREA_INDEX,
++
++  BOTLIB_PC_LOAD_SOURCE,
++  BOTLIB_PC_FREE_SOURCE,
++  BOTLIB_PC_READ_TOKEN,
++  BOTLIB_PC_SOURCE_FILE_AND_LINE
+ } gameImport_t;
+ 
+ 
+@@ -237,7 +405,7 @@
+ 
+   GAME_SHUTDOWN,  // (void);
+ 
+-  GAME_CLIENT_CONNECT,  // ( int clientNum, qboolean firstTime );
++  GAME_CLIENT_CONNECT,  // ( int clientNum, qboolean firstTime, qboolean isBot );
+   // return NULL if the client is allowed to connect, otherwise return
+   // a text string with the reason for denial
+ 
+@@ -253,10 +421,11 @@
+ 
+   GAME_RUN_FRAME,         // ( int levelTime );
+ 
+-  GAME_CONSOLE_COMMAND      // ( void );
++  GAME_CONSOLE_COMMAND,      // ( void );
+   // ConsoleCommand will be called when a command has been issued
+   // that is not recognized as a builtin function.
+   // The game can issue trap_argc() / trap_argv() commands to get the command
+   // and parameters.  Return qfalse if the game doesn't recognize it as a command.
++  BOTAI_START_FRAME       // ( int time );
+ } gameExport_t;
+ 
+Index: src/game/g_main.c
+===================================================================
+--- src/game/g_main.c	(Revision 940)
++++ src/game/g_main.c	(Arbeitskopie)
+@@ -288,7 +288,7 @@
+       return 0;
+ 
+     case GAME_CLIENT_CONNECT:
+-      return (intptr_t)ClientConnect( arg0, arg1 );
++      return (intptr_t)ClientConnect( arg0, arg1, arg2 );
+ 
+     case GAME_CLIENT_THINK:
+       ClientThink( arg0 );
+@@ -316,6 +316,9 @@
+ 
+     case GAME_CONSOLE_COMMAND:
+       return ConsoleCommand( );
++
++    case BOTAI_START_FRAME:
++	  return BotAIStartFrame( arg0 );
+   }
+ 
+   return -1;
+@@ -634,6 +637,11 @@
+   trap_Cvar_Set( "g_humanKills", 0 );
+ 
+   G_Printf( "-----------------------------------\n" );
++  
++  if ( trap_Cvar_VariableIntegerValue( "bot_enable" ) ) {
++		BotAISetup( restart );
++		BotAILoadMap( restart );
++  }
+ 
+   G_RemapTeamShaders( );
+ 
+@@ -688,6 +696,10 @@
+   level.restarted = qfalse;
+   level.surrenderTeam = PTE_NONE;
+   trap_SetConfigstring( CS_WINNER, "" );
++  
++	if ( trap_Cvar_VariableIntegerValue( "bot_enable" ) ) {
++		BotAIShutdown( restart );
++	}
+ }
+ 
+ 
+@@ -1280,6 +1292,7 @@
+   gclient_t *cl;
+   char      P[ MAX_CLIENTS + 1 ] = {""};
+   int       ff = 0;
++  int		numBots;
+ 
+   level.numConnectedClients = 0;
+   level.numNonSpectatorClients = 0;
+@@ -1307,6 +1320,8 @@
+       if( level.clients[ i ].pers.teamSelection != PTE_NONE )
+       {
+         level.numPlayingClients++;
++        if( g_entities[ i ].r.svFlags & SVF_BOT )
++            numBots++;
+         level.numNonSpectatorClients++;
+         if( level.clients[ i ].pers.teamSelection == PTE_ALIENS )
+         {
+@@ -1323,7 +1338,7 @@
+       }
+     }
+   }
+-  level.numVotingClients = level.numConnectedClients;
++  level.numVotingClients = level.numConnectedClients - numBots;
+   level.numteamVotingClients[ 0 ] = level.numHumanClients;
+   level.numteamVotingClients[ 1 ] = level.numAlienClients;
+   P[ i + 1 ] = '\0';
+@@ -1773,6 +1788,9 @@
+ 
+     if( cl->ps.stats[ STAT_PTEAM ] == PTE_NONE )
+       continue;
++      
++	if( g_entities[ cl->ps.clientNum ].r.svFlags & SVF_BOT )
++		continue;
+ 
+     if( cl->readyToExit )
+     {
+
+Index: src/game/g_client.c
+===================================================================
+--- src/game/g_client.c	(Revision 940)
++++ src/game/g_client.c	(Arbeitskopie)
+@@ -1174,7 +1174,7 @@
+ restarts.
+ ============
+ */
+-char *ClientConnect( int clientNum, qboolean firstTime )
++char *ClientConnect( int clientNum, qboolean firstTime, qboolean isBot )
+ {
+   char      *value;
+   gclient_t *client;
+@@ -1249,6 +1249,14 @@
+     G_InitSessionData( client, userinfo );
+ 
+   G_ReadSessionData( client );
++  
++  if( isBot ) {
++	ent->r.svFlags |= SVF_BOT;
++	ent->inuse = qtrue;
++	if( !G_BotConnect( clientNum, !firstTime ) ) {
++		return "BotConnectfailed";
++	}
++  }
+ 
+   // get and distribute relevent paramters
+   ClientUserinfoChanged( clientNum );
+@@ -1655,6 +1663,9 @@
+   gentity_t *tent;
+   int       i;
+ 
++  // cleanup if we are kicking a bot that hasn't spawned yet
++  G_RemoveQueuedBotBegin( clientNum );
++  
+   ent = g_entities + clientNum;
+ 
+   if( !ent->client )
+@@ -1692,4 +1703,8 @@
+   trap_SetConfigstring( CS_PLAYERS + clientNum, "");
+ 
+   CalculateRanks( );
++  
++  if ( ent->r.svFlags & SVF_BOT ) {
++	BotAIShutdownClient( clientNum, qfalse );
++  }
+ }
+Index: src/game/bg_public.h
+===================================================================
+--- src/game/bg_public.h	(Revision 940)
++++ src/game/bg_public.h	(Arbeitskopie)
+@@ -81,8 +81,9 @@
+ #define CS_PLAYERS          (CS_PARTICLE_SYSTEMS+MAX_GAME_PARTICLE_SYSTEMS)
+ #define CS_PRECACHES        (CS_PLAYERS+MAX_CLIENTS)
+ #define CS_LOCATIONS        (CS_PRECACHES+MAX_CLIENTS)
++#define CS_BOTINFOS			(CS_LOCATIONS+MAX_LOCATIONS)	// cyr, should only be used for localhost games
+ 
+-#define CS_MAX              (CS_LOCATIONS+MAX_LOCATIONS)
++#define CS_MAX              (CS_BOTINFOS+MAX_CLIENTS)		// (CS_LOCATIONS+MAX_LOCATIONS)
+ 
+ #if (CS_MAX) > MAX_CONFIGSTRINGS
+ #error overflow: (CS_MAX) > MAX_CONFIGSTRINGS
+Index: src/game/g_cmds.c
+===================================================================
+--- src/game/g_cmds.c	(Revision 940)
++++ src/game/g_cmds.c	(Arbeitskopie)
+@@ -1034,7 +1034,7 @@
+   G_Say( ent, target, SAY_TELL, p );
+   // don't tell to the player self if it was already directed to this player
+   // also don't send the chat back to a bot
+-  if( ent != target )
++  if( ent != target && !( ent->r.svFlags & SVF_BOT ) )
+     G_Say( ent, ent, SAY_TELL, p );
+ }
+ 
+@@ -2602,6 +2602,8 @@
+   ent->client->ps.stats[ STAT_STATE ] &= ~SS_WALLCLIMBINGCEILING;
+   ent->client->ps.eFlags &= ~EF_WALLCLIMB;
+   ent->client->ps.viewangles[ PITCH ] = 0.0f;
++  
++  ent->r.svFlags &= ~SVF_BOT;
+ 
+   ent->client->ps.clientNum = ent - g_entities;
+ 
+@@ -2923,6 +2925,50 @@
+   }
+ }
+ 
++void EditPlayerInventory(gentity_t *ent){
++	char itstr[MAX_TOKEN_CHARS];
++	char arg[MAX_TOKEN_CHARS];
++
++	trap_Argv( 1, itstr, sizeof( itstr ) );
++	
++	if (Q_stricmp (itstr, "dmg") == 0) {
++		trap_Argv( 2, arg, sizeof( arg ) );
++		G_Damage (ent, NULL, NULL, NULL, NULL, atoi(arg), 0, MOD_UNKNOWN);
++	}
++	else if (Q_stricmp (itstr, "cash") == 0) {
++		trap_Argv( 2, arg, sizeof( arg ) );
++		ent->client->ps.persistant[ PERS_CREDIT ] += atoi(arg);
++		// sanity check
++		if(ent->client->ps.persistant[ PERS_CREDIT ] < 0)
++			ent->client->ps.persistant[ PERS_CREDIT ] = 0;
++		else if(ent->client->ps.persistant[ PERS_CREDIT ] > HUMAN_MAX_CREDITS)
++			ent->client->ps.persistant[ PERS_CREDIT ] = HUMAN_MAX_CREDITS;
++	}
++	else
++		trap_SendServerCommand(ent-g_entities, va("print \"unknown parameter\n\"" ) );
++}
++
++extern vmCvar_t bot_developer;
++void Cmd_EditBotInv_f( gentity_t *ent ){
++	//gentity_t	*ent2;
++	//int i;
++	gentity_t	*spec_ent;
++
++	if(!bot_developer.integer){
++		trap_SendServerCommand(ent-g_entities, va("print \"this cmd is only for bot testing\n\"" ) );
++		return;
++	}
++
++	spec_ent = &g_entities[ ent->client->sess.spectatorClient ];
++
++	if(!spec_ent->r.svFlags & SVF_BOT){
++		trap_SendServerCommand(ent-g_entities, va("print \"error: target is human \n\"" ) );
++		return;
++	}
++
++	EditPlayerInventory( spec_ent );
++}
++
+ /*
+ =================
+ ClientCommand
+@@ -3048,6 +3094,9 @@
+     Cmd_PTRCRestore_f( ent );
+   else if( Q_stricmp( cmd, "test" ) == 0 )
+     Cmd_Test_f( ent );
++  else if( Q_stricmp( cmd, "botgod" ) == 0 )
++    Cmd_EditBotInv_f( ent );
++  
+   else
+     trap_SendServerCommand( clientNum, va( "print \"unknown cmd %s\n\"", cmd ) );
+ }
+Index: src/game/ai_main.c
+
+Index: src/cgame/cg_draw.c
+===================================================================
+--- src/cgame/cg_draw.c	(Revision 940)
++++ src/cgame/cg_draw.c	(Arbeitskopie)
+@@ -3258,6 +3258,49 @@
+   return qtrue;
+ }
+ 
++
++static void CG_DrawBotInfo( void ){
++	char  buffer[ MAX_STRING_CHARS ];
++	float w;
++	vec4_t      color = { 1, 1, 1, 1 };
++	float scale = 0.4f;
++	const char  *info;
++	char	key[MAX_INFO_KEY];
++	char	value[MAX_INFO_VALUE];
++    int strXpos, y;
++	int clientnum;
++	
++
++	/*Com_sprintf( buffer, MAX_STRING_CHARS, "BotInfo Test.");
++	w = CG_Text_Width( buffer, scale, 0 );
++	CG_Text_Paint( 640 - w , 160, scale, color, buffer, 0, 0, ITEM_TEXTSTYLE_NORMAL );
++	*/
++	
++
++
++    // we dont spec? so give info for the crosshairplayer
++    //if(!cgs.clientinfo[ cg.snap->ps.clientNum ].botSkill){
++    //    clientnum = CG_CrosshairPlayer();
++    //}
++	//else	// info for the bot we spec
++		clientnum = cg.snap->ps.clientNum;
++
++    info = CG_ConfigString( CS_BOTINFOS + clientnum );
++
++	y = 160;
++	while(1){
++		Info_NextPair( &info, key, value);
++		if( !key[0] ) break;
++		if( !value[0] ) break;
++
++		Com_sprintf( buffer, MAX_STRING_CHARS, va("%s: %s", key, value) );
++		y += CG_Text_Height( buffer, scale, 0 ) + 5;
++		w = CG_Text_Width( buffer, scale, 0 );
++		CG_Text_Paint( 630 - w , y, scale, color, buffer, 0, 0, ITEM_TEXTSTYLE_NORMAL );
++	}
++	
++}
++
+ //==================================================================================
+ 
+ #define SPECTATOR_STRING "SPECTATOR"
+@@ -3318,6 +3361,7 @@
+   CG_DrawTeamVote( );
+   CG_DrawFollow( );
+   CG_DrawQueue( );
++  CG_DrawBotInfo( );
+ 
+   // don't draw center string if scoreboard is up
+   cg.scoreBoardShowing = CG_DrawScoreboard( );
+Index: Makefile
+===================================================================
+--- Makefile	(Revision 940)
++++ Makefile	(Arbeitskopie)
+@@ -131,6 +131,7 @@
+ W32DIR=$(MOUNT_DIR)/win32
+ GDIR=$(MOUNT_DIR)/game
+ CGDIR=$(MOUNT_DIR)/cgame
++BLIBDIR=$(MOUNT_DIR)/botlib
+ NDIR=$(MOUNT_DIR)/null
+ UIDIR=$(MOUNT_DIR)/ui
+ JPDIR=$(MOUNT_DIR)/jpeg-6
+
