@@ -115,12 +115,6 @@ static void SV_MapRestart_f( void ) {
 		return;
 	}
 
-	if ( client->netchan.remoteAddress.type == NA_BOT ) {
-			isBot = true;
-		} else {
-			isBot = false;
-		}
-
 	// make sure server is running
 	if ( !com_sv_running->integer ) {
 		Com_Printf( "Server is not running.\n" );
@@ -196,6 +190,12 @@ static void SV_MapRestart_f( void ) {
 	// connect and begin all the clients
 	for (i=0 ; i<sv_maxclients->integer ; i++) {
 		client = &svs.clients[i];
+
+		if ( client->netchan.remoteAddress.type == NA_BOT ) {
+			isBot = true;
+		} else {
+			isBot = false;
+		}
 
 		// send the new gamestate to all connected clients
 		if ( client->state < CS_CONNECTED) {
