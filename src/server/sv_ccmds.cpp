@@ -116,9 +116,9 @@ static void SV_MapRestart_f( void ) {
 	}
 
 	if ( client->netchan.remoteAddress.type == NA_BOT ) {
-			isBot = qtrue;
+			isBot = true;
 		} else {
-			isBot = qfalse;
+			isBot = false;
 		}
 
 	// make sure server is running
