@@ -955,8 +955,8 @@ typedef enum {
 // a trace is returned when a box is swept through the world
 typedef struct {
 	qboolean	allsolid;	// if true, plane is not valid
-// FIXME: startsolid is supposed to be bool
-	int /*qboolean*/	startsolid;	// if true, the initial point was in a solid area
+// FIXME: startsolid is supposed to be bool //Auriga: FIXED!
+	/*int*/qboolean	startsolid;	// if true, the initial point was in a solid area 
 	float		fraction;	// time completed, 1.0 = didn't hit anything
 	vec3_t		endpos;		// final position
 	cplane_t	plane;		// surface normal at impact, transformed to world space

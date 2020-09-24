@@ -107,10 +107,10 @@ int AAS_UpdateEntity(int entnum, bot_entitystate_t *state)
 	//number of the entity
 	ent->i.number = entnum;
 	//updated so set valid flag
-	ent->i.valid = qtrue;
+	ent->i.valid = true;
 	//link everything the first frame
-	if (aasworld.numframes == 1) relink = qtrue;
-	else relink = qfalse;
+	if (aasworld.numframes == 1) relink = true;
+	else relink = false;
 	//
 	if (ent->i.solid == SOLID_BSP)
 	{
@@ -118,7 +118,7 @@ int AAS_UpdateEntity(int entnum, bot_entitystate_t *state)
 		if (!VectorCompare(state->angles, ent->i.angles))
 		{
 			VectorCopy(state->angles, ent->i.angles);
-			relink = qtrue;
+			relink = true;
 		} //end if
 		//get the mins and maxs of the model
 		//FIXME: rotate mins and maxs
@@ -132,7 +132,7 @@ int AAS_UpdateEntity(int entnum, bot_entitystate_t *state)
 		{
 			VectorCopy(state->mins, ent->i.mins);
 			VectorCopy(state->maxs, ent->i.maxs);
-			relink = qtrue;
+			relink = true;
 		} //end if
 		VectorCopy(state->angles, ent->i.angles);
 	} //end if
@@ -140,7 +140,7 @@ int AAS_UpdateEntity(int entnum, bot_entitystate_t *state)
 	if (!VectorCompare(state->origin, ent->i.origin))
 	{
 		VectorCopy(state->origin, ent->i.origin);
-		relink = qtrue;
+		relink = true;
 	} //end if
 	//if the entity should be relinked
 	if (relink)
@@ -272,11 +272,11 @@ int AAS_OriginOfMoverWithModelNum(int modelnum, vec3_t origin)
 			if (ent->i.modelindex == modelnum)
 			{
 				VectorCopy(ent->i.origin, origin);
-				return qtrue;
+				return true;
 			} //end if
 		} //end if
 	} //end for
-	return qfalse;
+	return false;
 } //end of the function AAS_OriginOfMoverWithModelNum
 //===========================================================================
 //
@@ -344,7 +344,7 @@ void AAS_InvalidateEntities(void)
 	int i;
 	for (i = 0; i < aasworld.maxentities; i++)
 	{
-		aasworld.entities[i].i.valid = qfalse;
+		aasworld.entities[i].i.valid = false;
 		aasworld.entities[i].i.number = i;
 	} //end for
 } //end of the function AAS_InvalidateEntities
@@ -391,9 +391,9 @@ int AAS_NearestEntity(vec3_t origin, int modelindex)
 		ent = &aasworld.entities[i];
 		if (ent->i.modelindex != modelindex) continue;
 		VectorSubtract(ent->i.origin, origin, dir);
-		if (abs(dir[0]) < 40)
+		if (fabsf(dir[0]) < 40)
 		{
-			if (abs(dir[1]) < 40)
+			if (fabsf(dir[1]) < 40)
 			{
 				dist = VectorLength(dir);
 				if (dist < bestdist)

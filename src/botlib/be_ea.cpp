@@ -37,10 +37,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "l_struct.h"
 #include "botlib.h"
 #include "be_interface.h"
+#include "be_ea.h"
 
 #define MAX_USERMOVE				400
-#define MAX_COMMANDARGUMENTS		10
-#define ACTION_JUMPEDLASTFRAME		128
 
 bot_input_t *botinputs;
 
@@ -52,7 +51,7 @@ bot_input_t *botinputs;
 //===========================================================================
 void EA_Say(int client, char *str)
 {
-	botimport.BotClientCommand(client, va("say %s", str) );
+	botimport.BotClientCommand(client, (char *)va("say %s", str) );
 } //end of the function EA_Say
 //===========================================================================
 //
@@ -62,7 +61,7 @@ void EA_Say(int client, char *str)
 //===========================================================================
 void EA_SayTeam(int client, char *str)
 {
-	botimport.BotClientCommand(client, va("say_team %s", str));
+	botimport.BotClientCommand(client, (char *)va("say_team %s", str));
 } //end of the function EA_SayTeam
 //===========================================================================
 //
@@ -72,7 +71,7 @@ void EA_SayTeam(int client, char *str)
 //===========================================================================
 void EA_Tell(int client, int clientto, char *str)
 {
-	botimport.BotClientCommand(client, va("tell %d, %s", clientto, str));
+	botimport.BotClientCommand(client, (char *)va("tell %d, %s", clientto, str));
 } //end of the function EA_SayTeam
 //===========================================================================
 //
@@ -82,7 +81,7 @@ void EA_Tell(int client, int clientto, char *str)
 //===========================================================================
 void EA_UseItem(int client, char *it)
 {
-	botimport.BotClientCommand(client, va("use %s", it));
+	botimport.BotClientCommand(client, (char *)va("use %s", it));
 } //end of the function EA_UseItem
 //===========================================================================
 //
@@ -92,7 +91,7 @@ void EA_UseItem(int client, char *it)
 //===========================================================================
 void EA_DropItem(int client, char *it)
 {
-	botimport.BotClientCommand(client, va("drop %s", it));
+	botimport.BotClientCommand(client, (char *)va("drop %s", it));
 } //end of the function EA_DropItem
 //===========================================================================
 //
@@ -102,7 +101,7 @@ void EA_DropItem(int client, char *it)
 //===========================================================================
 void EA_UseInv(int client, char *inv)
 {
-	botimport.BotClientCommand(client, va("invuse %s", inv));
+	botimport.BotClientCommand(client, (char *)va("invuse %s", inv));
 } //end of the function EA_UseInv
 //===========================================================================
 //
@@ -112,7 +111,7 @@ void EA_UseInv(int client, char *inv)
 //===========================================================================
 void EA_DropInv(int client, char *inv)
 {
-	botimport.BotClientCommand(client, va("invdrop %s", inv));
+	botimport.BotClientCommand(client, (char *)va("invdrop %s", inv));
 } //end of the function EA_DropInv
 //===========================================================================
 //
@@ -416,24 +415,6 @@ void EA_View(int client, vec3_t viewangles)
 //===========================================================================
 void EA_EndRegular(int client, float thinktime)
 {
-/*
-	bot_input_t *bi;
-	int jumped = qfalse;
-
-	bi = &botinputs[client];
-
-	bi->actionflags &= ~ACTION_JUMPEDLASTFRAME;
-
-	bi->thinktime = thinktime;
-	botimport.BotInput(client, bi);
-
-	bi->thinktime = 0;
-	VectorClear(bi->dir);
-	bi->speed = 0;
-	jumped = bi->actionflags & ACTION_JUMP;
-	bi->actionflags = 0;
-	if (jumped) bi->actionflags |= ACTION_JUMPEDLASTFRAME;
-*/
 } //end of the function EA_EndRegular
 //===========================================================================
 //
@@ -444,23 +425,10 @@ void EA_EndRegular(int client, float thinktime)
 void EA_GetInput(int client, float thinktime, bot_input_t *input)
 {
 	bot_input_t *bi;
-//	int jumped = qfalse;
 
 	bi = &botinputs[client];
-
-//	bi->actionflags &= ~ACTION_JUMPEDLASTFRAME;
-
 	bi->thinktime = thinktime;
 	Com_Memcpy(input, bi, sizeof(bot_input_t));
-
-	/*
-	bi->thinktime = 0;
-	VectorClear(bi->dir);
-	bi->speed = 0;
-	jumped = bi->actionflags & ACTION_JUMP;
-	bi->actionflags = 0;
-	if (jumped) bi->actionflags |= ACTION_JUMPEDLASTFRAME;
-	*/
 } //end of the function EA_GetInput
 //===========================================================================
 //
@@ -471,10 +439,9 @@ void EA_GetInput(int client, float thinktime, bot_input_t *input)
 void EA_ResetInput(int client)
 {
 	bot_input_t *bi;
-	int jumped = qfalse;
+	int jumped = false;
 
 	bi = &botinputs[client];
-	bi->actionflags &= ~ACTION_JUMPEDLASTFRAME;
 
 	bi->thinktime = 0;
 	VectorClear(bi->dir);

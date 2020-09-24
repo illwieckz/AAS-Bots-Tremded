@@ -24,11 +24,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "qcommon/q_shared.h"
 #include "server.h"
-
-extern "C"
-{
 #include "../botlib/botlib.h"
-}
+
 
 typedef struct bot_debugpoly_s
 {
@@ -140,7 +137,7 @@ void BotDrawDebugPolygons(void (*drawPoly)(int color, int numPoints, float *poin
 BotImport_Print
 ==================
 */
-void QDECL BotImport_Print(int type, char *fmt, ...)
+void QDECL BotImport_Print(int type, const char *fmt, ...)
 {
 	char str[2048];
 	va_list ap;
@@ -547,7 +544,7 @@ void SV_BotInitBotLib(void) {
 
 	// file system access
 	botlib_import.FS_FOpenFile = FS_FOpenFileByMode;
-	botlib_import.FS_Read = FS_Read; //was FS_Read2, lets see about this
+	botlib_import.FS_Read = FS_Read2; //was FS_Read2, lets see about this
 	botlib_import.FS_Write = FS_Write;
 	botlib_import.FS_FCloseFile = FS_FCloseFile;
 	botlib_import.FS_Seek = FS_Seek;

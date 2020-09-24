@@ -622,14 +622,14 @@ static void SV_ClipMoveToEntities(moveclip_t *clip)
 
         if (trace.fraction < clip->trace.fraction)
         {
-            int oldStart;
+     /*int*/qboolean oldStart;//Auriga: converted to suit new blib
 
             // make sure we keep a startsolid from a previous trace
             oldStart = clip->trace.startsolid;
 
             trace.entityNum = touch->s.number;
             clip->trace = trace;
-            clip->trace.startsolid |= oldStart;
+            clip->trace.startsolid = oldStart; //Auriga: was clip->trace.startsolid |= oldStart;
         }
     }
 }

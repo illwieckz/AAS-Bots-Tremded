@@ -25,6 +25,7 @@ along with Tremulous; if not, see <https://www.gnu.org/licenses/>
 #include "files.h"
 #include "q_shared.h"
 #include "qcommon.h"
+#include "precomp.h"
 
 //script flags
 #define SCFL_NOERRORS             0x0001

@@ -343,7 +343,7 @@ void BotQueueConsoleMessage(int chatstate, int type, char *message)
 	m->handle = cs->handle;
 	m->time = AAS_Time();
 	m->type = type;
-	strncpy(m->message, message, MAX_MESSAGE_SIZE);
+	Q_strncpyz(m->message, message, MAX_MESSAGE_SIZE);
 	m->next = NULL;
 	if (cs->lastmessage)
 	{
@@ -368,13 +368,26 @@ void BotQueueConsoleMessage(int chatstate, int type, char *message)
 int BotNextConsoleMessage(int chatstate, bot_consolemessage_t *cm)
 {
 	bot_chatstate_t *cs;
+	bot_consolemessage_t *firstmsg;
 
 	cs = BotChatStateFromHandle(chatstate);
 	if (!cs) return 0;
-	if (cs->firstmessage)
+	if ((firstmsg = cs->firstmessage))
 	{
-		Com_Memcpy(cm, cs->firstmessage, sizeof(bot_consolemessage_t));
-		cm->next = cm->prev = NULL;
+		cm->handle = firstmsg->handle;
+		cm->time = firstmsg->time;
+		cm->type = firstmsg->type;
+		Q_strncpyz(cm->message, firstmsg->message,
+			   sizeof(cm->message));
+		
+		/* We omit setting the two pointers in cm because pointer
+		 * size in the VM differs between the size in the engine on
+		 * 64 bit machines, which would lead to a buffer overflow if
+		 * this functions is called from the VM. The pointers are
+		 * of no interest to functions calling
+		 * BotNextConsoleMessage anyways.
+		 */
+		
 		return cm->handle;
 	} //end if
 	return 0;
@@ -410,8 +423,8 @@ int IsWhiteSpace(char c)
 		|| c == ',' || c == '.'
 		|| c == '['	|| c == ']'
 		|| c == '-' || c == '_'
-		|| c == '+' || c == '=') return qfalse;
-	return qtrue;
+		|| c == '+' || c == '=') return false;
+	return true;
 } //end of the function IsWhiteSpace
 //===========================================================================
 //
@@ -540,17 +553,17 @@ void StringReplaceWords(char *string, char *synonym, char *replacement)
 	char *str, *str2;
 
 	//find the synonym in the string
-	str = StringContainsWord(string, synonym, qfalse);
-	//if the synonym occured in the string
+	str = StringContainsWord(string, synonym, false);
+	//if the synonym occurred in the string
 	while(str)
 	{
 		//if the synonym isn't part of the replacement which is already in the string
-		//usefull for abreviations
-		str2 = StringContainsWord(string, replacement, qfalse);
+		//useful for abbreviations
+		str2 = StringContainsWord(string, replacement, false);
 		while(str2)
 		{
 			if (str2 <= str && str < str2 + strlen(replacement)) break;
-			str2 = StringContainsWord(str2+1, replacement, qfalse);
+			str2 = StringContainsWord(str2+1, replacement, false);
 		} //end while
 		if (!str2)
 		{
@@ -559,7 +572,7 @@ void StringReplaceWords(char *string, char *synonym, char *replacement)
 			Com_Memcpy(str, replacement, strlen(replacement));
 		} //end if
 		//find the next synonym in the string
-		str = StringContainsWord(str+strlen(replacement), synonym, qfalse);
+		str = StringContainsWord(str+strlen(replacement), synonym, false);
 	} //end if
 } //end of the function StringReplaceWords
 //===========================================================================
@@ -661,7 +674,7 @@ bot_synonymlist_t *BotLoadSynonyms(char *filename)
 				else if (!strcmp(token.string, "["))
 				{
 					size += sizeof(bot_synonymlist_t);
-					if (pass)
+					if (pass && ptr)
 					{
 						syn = (bot_synonymlist_t *) ptr;
 						ptr += sizeof(bot_synonymlist_t);
@@ -686,14 +699,14 @@ bot_synonymlist_t *BotLoadSynonyms(char *filename)
 						StripDoubleQuotes(token.string);
 						if (strlen(token.string) <= 0)
 						{
-							SourceError(source, "empty string", token.string);
+							SourceError(source, "empty string");
 							FreeSource(source);
 							return NULL;
 						} //end if
 						len = strlen(token.string) + 1;
 						len = PAD(len, sizeof(long));
 						size += sizeof(bot_synonym_t) + len;
-						if (pass)
+						if (pass && ptr)
 						{
 							synonym = (bot_synonym_t *) ptr;
 							ptr += sizeof(bot_synonym_t);
@@ -713,7 +726,7 @@ bot_synonymlist_t *BotLoadSynonyms(char *filename)
 							FreeSource(source);
 							return NULL;
 						} //end if
-						if (pass)
+						if (pass && ptr)
 						{
 							synonym->weight = token.floatvalue;
 							syn->totalweight += synonym->weight;
@@ -727,7 +740,7 @@ bot_synonymlist_t *BotLoadSynonyms(char *filename)
 					} //end while
 					if (numsynonyms < 2)
 					{
-						SourceError(source, "synonym must have at least two entries\n");
+						SourceError(source, "synonym must have at least two entries");
 						FreeSource(source);
 						return NULL;
 					} //end if
@@ -832,14 +845,13 @@ void BotReplaceReplySynonyms(char *string, unsigned long int context)
 			if (!(syn->context & context)) continue;
 			for (synonym = syn->firstsynonym->next; synonym; synonym = synonym->next)
 			{
-				str2 = synonym->string;
 				//if the synonym is not at the front of the string continue
-				str2 = StringContainsWord(str1, synonym->string, qfalse);
+				str2 = StringContainsWord(str1, synonym->string, false);
 				if (!str2 || str2 != str1) continue;
 				//
 				replacement = syn->firstsynonym->string;
 				//if the replacement IS in front of the string continue
-				str2 = StringContainsWord(str1, replacement, qfalse);
+				str2 = StringContainsWord(str1, replacement, false);
 				if (str2 && str2 == str1) continue;
 				//
 				memmove(str1 + strlen(replacement), str1+strlen(synonym->string),
@@ -873,15 +885,15 @@ int BotLoadChatMessage(source_t *source, char *chatmessagestring)
 	//
 	while(1)
 	{
-		if (!PC_ExpectAnyToken(source, &token)) return qfalse;
+		if (!PC_ExpectAnyToken(source, &token)) return false;
 		//fixed string
 		if (token.type == TT_STRING)
 		{
 			StripDoubleQuotes(token.string);
 			if (strlen(ptr) + strlen(token.string) + 1 > MAX_MESSAGE_SIZE)
 			{
-				SourceError(source, "chat message too long\n");
-				return qfalse;
+				SourceError(source, "chat message too long");
+				return false;
 			} //end if
 			strcat(ptr, token.string);
 		} //end else if
@@ -890,8 +902,8 @@ int BotLoadChatMessage(source_t *source, char *chatmessagestring)
 		{
 			if (strlen(ptr) + 7 > MAX_MESSAGE_SIZE)
 			{
-				SourceError(source, "chat message too long\n");
-				return qfalse;
+				SourceError(source, "chat message too long");
+				return false;
 			} //end if
 			sprintf(&ptr[strlen(ptr)], "%cv%ld%c", ESCAPE_CHAR, token.intvalue, ESCAPE_CHAR);
 		} //end if
@@ -900,21 +912,21 @@ int BotLoadChatMessage(source_t *source, char *chatmessagestring)
 		{
 			if (strlen(ptr) + 7 > MAX_MESSAGE_SIZE)
 			{
-				SourceError(source, "chat message too long\n");
-				return qfalse;
+				SourceError(source, "chat message too long");
+				return false;
 			} //end if
 			sprintf(&ptr[strlen(ptr)], "%cr%s%c", ESCAPE_CHAR, token.string, ESCAPE_CHAR);
 		} //end else if
 		else
 		{
-			SourceError(source, "unknown message component %s\n", token.string);
-			return qfalse;
+			SourceError(source, "unknown message component %s", token.string);
+			return false;
 		} //end else
 		if (PC_CheckTokenString(source, ";")) break;
-		if (!PC_ExpectTokenString(source, ",")) return qfalse;
+		if (!PC_ExpectTokenString(source, ",")) return false;
 	} //end while
 	//
-	return qtrue;
+	return true;
 } //end of the function BotLoadChatMessage
 //===========================================================================
 //
@@ -992,7 +1004,7 @@ bot_randomlist_t *BotLoadRandomStrings(char *filename)
 			len = strlen(token.string) + 1;
 			len = PAD(len, sizeof(long));
 			size += sizeof(bot_randomlist_t) + len;
-			if (pass)
+			if (pass && ptr)
 			{
 				random = (bot_randomlist_t *) ptr;
 				ptr += sizeof(bot_randomlist_t);
@@ -1014,7 +1026,6 @@ bot_randomlist_t *BotLoadRandomStrings(char *filename)
 			} //end if
 			while(!PC_CheckTokenString(source, "}"))
 			{
-				size_t len;
 				if (!BotLoadChatMessage(source, chatmessagestring))
 				{
 					FreeSource(source);
@@ -1023,7 +1034,7 @@ bot_randomlist_t *BotLoadRandomStrings(char *filename)
 				len = strlen(chatmessagestring) + 1;
 				len = PAD(len, sizeof(long));
 				size += sizeof(bot_randomstring_t) + len;
-				if (pass)
+				if (pass && ptr)
 				{
 					randomstring = (bot_randomstring_t *) ptr;
 					ptr += sizeof(bot_randomstring_t);
@@ -1146,7 +1157,7 @@ void BotFreeMatchPieces(bot_matchpiece_t *matchpieces)
 // Returns:					-
 // Changes Globals:		-
 //===========================================================================
-bot_matchpiece_t *BotLoadMatchPieces(source_t *source, char *endtoken)
+bot_matchpiece_t *BotLoadMatchPieces(source_t *source, const char *endtoken)
 {
 	int lastwasvariable, emptystring;
 	token_t token;
@@ -1156,27 +1167,27 @@ bot_matchpiece_t *BotLoadMatchPieces(source_t *source, char *endtoken)
 	firstpiece = NULL;
 	lastpiece = NULL;
 	//
-	lastwasvariable = qfalse;
+	lastwasvariable = false;
 	//
 	while(PC_ReadToken(source, &token))
 	{
 		if (token.type == TT_NUMBER && (token.subtype & TT_INTEGER))
 		{
-			if (token.intvalue < 0 || token.intvalue >= MAX_MATCHVARIABLES)
+			if (token.intvalue >= MAX_MATCHVARIABLES)
 			{
-				SourceError(source, "can't have more than %d match variables\n", MAX_MATCHVARIABLES);
+				SourceError(source, "can't have more than %d match variables", MAX_MATCHVARIABLES);
 				FreeSource(source);
 				BotFreeMatchPieces(firstpiece);
 				return NULL;
 			} //end if
 			if (lastwasvariable)
 			{
-				SourceError(source, "not allowed to have adjacent variables\n");
+				SourceError(source, "not allowed to have adjacent variables");
 				FreeSource(source);
 				BotFreeMatchPieces(firstpiece);
 				return NULL;
 			} //end if
-			lastwasvariable = qtrue;
+			lastwasvariable = true;
 			//
 			matchpiece = (bot_matchpiece_t *) GetClearedHunkMemory(sizeof(bot_matchpiece_t));
 			matchpiece->type = MT_VARIABLE;
@@ -1199,7 +1210,7 @@ bot_matchpiece_t *BotLoadMatchPieces(source_t *source, char *endtoken)
 			lastpiece = matchpiece;
 			//
 			lastmatchstring = NULL;
-			emptystring = qfalse;
+			emptystring = false;
 			//
 			do
 			{
@@ -1216,18 +1227,18 @@ bot_matchpiece_t *BotLoadMatchPieces(source_t *source, char *endtoken)
 				matchstring = (bot_matchstring_t *) GetClearedHunkMemory(sizeof(bot_matchstring_t) + strlen(token.string) + 1);
 				matchstring->string = (char *) matchstring + sizeof(bot_matchstring_t);
 				strcpy(matchstring->string, token.string);
-				if (!strlen(token.string)) emptystring = qtrue;
+				if (!strlen(token.string)) emptystring = true;
 				matchstring->next = NULL;
 				if (lastmatchstring) lastmatchstring->next = matchstring;
 				else matchpiece->firststring = matchstring;
 				lastmatchstring = matchstring;
 			} while(PC_CheckTokenString(source, "|"));
 			//if there was no empty string found
-			if (!emptystring) lastwasvariable = qfalse;
+			if (!emptystring) lastwasvariable = false;
 		} //end if
 		else
 		{
-			SourceError(source, "invalid token %s\n", token.string);
+			SourceError(source, "invalid token %s", token.string);
 			FreeSource(source);
 			BotFreeMatchPieces(firstpiece);
 			return NULL;
@@ -1287,7 +1298,7 @@ bot_matchtemplate_t *BotLoadMatchTemplates(char *matchfile)
 	{
 		if (token.type != TT_NUMBER || !(token.subtype & TT_INTEGER))
 		{
-			SourceError(source, "expected integer, found %s\n", token.string);
+			SourceError(source, "expected integer, found %s", token.string);
 			BotFreeMatchTemplates(matches);
 			FreeSource(source);
 			return NULL;
@@ -1391,7 +1402,7 @@ int StringsMatch(bot_matchpiece_t *pieces, bot_match_t *match)
 					break;
 				} //end if
 				//Log_Write("MT_STRING: %s", mp->string);
-				index = StringContains(strptr, ms->string, qfalse);
+				index = StringContains(strptr, ms->string, false);
 				if (index >= 0)
 				{
 					newstrptr = strptr + index;
@@ -1410,7 +1421,7 @@ int StringsMatch(bot_matchpiece_t *pieces, bot_match_t *match)
 					newstrptr = NULL;
 				} //end if
 			} //end for
-			if (!newstrptr) return qfalse;
+			if (!newstrptr) return false;
 			strptr = newstrptr + strlen(ms->string);
 		} //end if
 		//if it is a variable piece of string
@@ -1427,13 +1438,13 @@ int StringsMatch(bot_matchpiece_t *pieces, bot_match_t *match)
 		//if the last piece was a variable string
 		if (lastvariable >= 0)
 		{
-        		assert( match->variables[lastvariable].offset >= 0 ); // bk001204
+        		assert( match->variables[lastvariable].offset >= 0 );
 			match->variables[lastvariable].length =
 				strlen(&match->string[ (int) match->variables[lastvariable].offset]);
 		} //end if
-		return qtrue;
+		return true;
 	} //end if
-	return qfalse;
+	return false;
 } //end of the function StringsMatch
 //===========================================================================
 //
@@ -1446,7 +1457,7 @@ int BotFindMatch(char *str, bot_match_t *match, unsigned long int context)
 	int i;
 	bot_matchtemplate_t *ms;
 
-	strncpy(match->string, str, MAX_MESSAGE_SIZE);
+	Q_strncpyz(match->string, str, MAX_MESSAGE_SIZE);
 	//remove any trailing enters
 	while(strlen(match->string) &&
 			match->string[strlen(match->string)-1] == '\n')
@@ -1464,10 +1475,10 @@ int BotFindMatch(char *str, bot_match_t *match, unsigned long int context)
 		{
 			match->type = ms->type;
 			match->subtype = ms->subtype;
-			return qtrue;
+			return true;
 		} //end if
 	} //end for
-	return qfalse;
+	return false;
 } //end of the function BotFindMatch
 //===========================================================================
 //
@@ -1488,7 +1499,7 @@ void BotMatchVariable(bot_match_t *match, int variable, char *buf, int size)
 	{
 		if (match->variables[variable].length < size)
 			size = match->variables[variable].length+1;
-		assert( match->variables[variable].offset >= 0 ); // bk001204
+		assert( match->variables[variable].offset >= 0 );
 		strncpy(buf, &match->string[ (int) match->variables[variable].offset], size-1);
 		buf[size-1] = '\0';
 	} //end if
@@ -1496,7 +1507,6 @@ void BotMatchVariable(bot_match_t *match, int variable, char *buf, int size)
 	{
 		strcpy(buf, "");
 	} //end else
-	return;
 } //end of the function BotMatchVariable
 //===========================================================================
 //
@@ -1562,7 +1572,7 @@ bot_stringlist_t *BotCheckChatMessageIntegrety(char *message, bot_stringlist_t *
 						if (!BotFindStringInList(stringlist, temp))
 						{
 							Log_Write("%s = {\"%s\"} //MISSING RANDOM\r\n", temp, temp);
-							s = GetClearedMemory(sizeof(bot_stringlist_t) + strlen(temp) + 1);
+							s = (bot_stringlist_t *)GetClearedMemory(sizeof(bot_stringlist_t) + strlen(temp) + 1);
 							s->string = (char *) s + sizeof(bot_stringlist_t);
 							strcpy(s->string, temp);
 							s->next = stringlist;
@@ -1736,23 +1746,23 @@ void BotCheckValidReplyChatKeySet(source_t *source, bot_replychatkey_t *keys)
 	bot_replychatkey_t *key, *key2;
 
 	//
-	allprefixed = qtrue;
-	hasvariableskey = hasstringkey = qfalse;
+	allprefixed = true;
+	hasvariableskey = hasstringkey = false;
 	for (key = keys; key; key = key->next)
 	{
 		if (!(key->flags & (RCKFL_AND|RCKFL_NOT)))
 		{
-			allprefixed = qfalse;
+			allprefixed = false;
 			if (key->flags & RCKFL_VARIABLES)
 			{
 				for (m = key->match; m; m = m->next)
 				{
-					if (m->type == MT_VARIABLE) hasvariableskey = qtrue;
+					if (m->type == MT_VARIABLE) hasvariableskey = true;
 				} //end for
 			} //end if
 			else if (key->flags & RCKFL_STRING)
 			{
-				hasstringkey = qtrue;
+				hasstringkey = true;
 			} //end else if
 		} //end if
 		else if ((key->flags & RCKFL_AND) && (key->flags & RCKFL_STRING))
@@ -1769,7 +1779,7 @@ void BotCheckValidReplyChatKeySet(source_t *source, bot_replychatkey_t *keys)
 						{
 							for (ms = m->firststring; ms; ms = ms->next)
 							{
-								if (StringContains(ms->string, key->string, qfalse) != -1)
+								if (StringContains(ms->string, key->string, false) != -1)
 								{
 									break;
 								} //end if
@@ -1797,7 +1807,7 @@ void BotCheckValidReplyChatKeySet(source_t *source, bot_replychatkey_t *keys)
 				if (key2->flags & RCKFL_NOT) continue;
 				if (key2->flags & RCKFL_STRING)
 				{
-					if (StringContains(key2->string, key->string, qfalse) != -1)
+					if (StringContains(key2->string, key->string, false) != -1)
 					{
 						SourceWarning(source, "the key %s with prefix ! is inside the key %s", key->string, key2->string);
 					} //end if
@@ -1810,7 +1820,7 @@ void BotCheckValidReplyChatKeySet(source_t *source, bot_replychatkey_t *keys)
 						{
 							for (ms = m->firststring; ms; ms = ms->next)
 							{
-								if (StringContains(ms->string, key->string, qfalse) != -1)
+								if (StringContains(ms->string, key->string, false) != -1)
 								{
 									SourceWarning(source, "the key %s with prefix ! is inside "
 												"the match template string %s", key->string, ms->string);
@@ -1865,7 +1875,7 @@ bot_replychat_t *BotLoadReplyChat(char *filename)
 			return NULL;
 		} //end if
 		//
-		replychat = GetClearedHunkMemory(sizeof(bot_replychat_t));
+		replychat = (bot_replychat_t *)GetClearedHunkMemory(sizeof(bot_replychat_t));
 		replychat->keys = NULL;
 		replychat->next = replychatlist;
 		replychatlist = replychat;
@@ -1980,7 +1990,7 @@ bot_replychat_t *BotLoadReplyChat(char *filename)
 	botimport.Print(PRT_MESSAGE, "loaded %s\n", filename);
 	//
 	//BotDumpReplyChat(replychatlist);
-	if (bot_developer)
+	if (botDeveloper)
 	{
 		BotCheckReplyChatIntegrety(replychatlist);
 	} //end if
@@ -2037,7 +2047,7 @@ bot_chat_t *BotLoadInitialChat(char *chatfile, char *chatname)
 #endif //DEBUG
 	//
 	size = 0;
-	foundchat = qfalse;
+	foundchat = false;
 	//a bot chat is parsed in two phases
 	for (pass = 0; pass < 2; pass++)
 	{
@@ -2069,7 +2079,7 @@ bot_chat_t *BotLoadInitialChat(char *chatfile, char *chatname)
 					return NULL;
 				} //end if
 				StripDoubleQuotes(token.string);
-				//after the chat name we expect a opening brace
+				//after the chat name we expect an opening brace
 				if (!PC_ExpectTokenString(source, "{"))
 				{
 					FreeSource(source);
@@ -2078,7 +2088,7 @@ bot_chat_t *BotLoadInitialChat(char *chatfile, char *chatname)
 				//if the chat name is found
 				if (!Q_stricmp(token.string, chatname))
 				{
-					foundchat = qtrue;
+					foundchat = true;
 					//read the chat types
 					while(1)
 					{
@@ -2090,7 +2100,7 @@ bot_chat_t *BotLoadInitialChat(char *chatfile, char *chatname)
 						if (!strcmp(token.string, "}")) break;
 						if (strcmp(token.string, "type"))
 						{
-							SourceError(source, "expected type found %s\n", token.string);
+							SourceError(source, "expected type found %s", token.string);
 							FreeSource(source);
 							return NULL;
 						} //end if
@@ -2102,10 +2112,10 @@ bot_chat_t *BotLoadInitialChat(char *chatfile, char *chatname)
 							return NULL;
 						} //end if
 						StripDoubleQuotes(token.string);
-						if (pass)
+						if (pass && ptr)
 						{
 							chattype = (bot_chattype_t *) ptr;
-							strncpy(chattype->name, token.string, MAX_CHATTYPE_NAME);
+							Q_strncpyz(chattype->name, token.string, MAX_CHATTYPE_NAME);
 							chattype->firstchatmessage = NULL;
 							//add the chat type to the chat
 							chattype->next = chat->types;
@@ -2125,7 +2135,7 @@ bot_chat_t *BotLoadInitialChat(char *chatfile, char *chatname)
 							} //end if
 							len = strlen(chatmessagestring) + 1;
 							len = PAD(len, sizeof(long));
-							if (pass)
+							if (pass && ptr)
 							{
 								chatmessage = (bot_chatmessage_t *) ptr;
 								chatmessage->time = -2*CHATMESSAGE_RECENTTIME;
@@ -2161,7 +2171,7 @@ bot_chat_t *BotLoadInitialChat(char *chatfile, char *chatname)
 			} //end if
 			else
 			{
-				SourceError(source, "unknown definition %s\n", token.string);
+				SourceError(source, "unknown definition %s", token.string);
 				FreeSource(source);
 				return NULL;
 			} //end else
@@ -2179,14 +2189,14 @@ bot_chat_t *BotLoadInitialChat(char *chatfile, char *chatname)
 	botimport.Print(PRT_MESSAGE, "loaded %s from %s\n", chatname, chatfile);
 	//
 	//BotDumpInitialChat(chat);
-	if (bot_developer)
+	if (botDeveloper)
 	{
 		BotCheckInitialChatIntegrety(chat);
 	} //end if
 #ifdef DEBUG
 	botimport.Print(PRT_MESSAGE, "initial chats loaded in %d msec\n", Sys_MilliSeconds() - starttime);
 #endif //DEBUG
-	//character was read succesfully
+	//character was read successfully
 	return chat;
 } //end of the function BotLoadInitialChat
 //===========================================================================
@@ -2254,7 +2264,7 @@ int BotLoadChatFile(int chatstate, char *chatfile, char *chatname)
 	} //end if
 	if (!LibVarGetValue("bot_reloadcharacters"))
 	{
-		ichatdata[avail] = GetClearedMemory( sizeof(bot_ichatdata_t) );
+		ichatdata[avail] = (bot_ichatdata_t *)GetClearedMemory( sizeof(bot_ichatdata_t) );
 		ichatdata[avail]->chat = cs->chat;
 		Q_strncpyz( ichatdata[avail]->chatname, chatname, sizeof(ichatdata[avail]->chatname) );
 		Q_strncpyz( ichatdata[avail]->filename, chatfile, sizeof(ichatdata[avail]->filename) );
@@ -2275,7 +2285,7 @@ int BotExpandChatMessage(char *outmessage, char *message, unsigned long mcontext
 	char *outputbuf, *ptr, *msgptr;
 	char temp[MAX_MESSAGE_SIZE];
 
-	expansion = qfalse;
+	expansion = false;
 	msgptr = message;
 	outputbuf = outmessage;
 	len = 0;
@@ -2300,11 +2310,11 @@ int BotExpandChatMessage(char *outmessage, char *message, unsigned long mcontext
 					if (num > MAX_MATCHVARIABLES)
 					{
 						botimport.Print(PRT_ERROR, "BotConstructChat: message %s variable %d out of range\n", message, num);
-						return qfalse;
+						return false;
 					} //end if
 					if (match->variables[num].offset >= 0)
 					{
-					        assert( match->variables[num].offset >= 0 ); // bk001204
+					        assert( match->variables[num].offset >= 0 );
 						ptr = &match->string[ (int) match->variables[num].offset];
 						for (i = 0; i < match->variables[num].length; i++)
 						{
@@ -2326,7 +2336,7 @@ int BotExpandChatMessage(char *outmessage, char *message, unsigned long mcontext
 						if (len + strlen(temp) >= MAX_MESSAGE_SIZE)
 						{
 							botimport.Print(PRT_ERROR, "BotConstructChat: message %s too long\n", message);
-							return qfalse;
+							return false;
 						} //end if
 						strcpy(&outputbuf[len], temp);
 						len += strlen(temp);
@@ -2348,16 +2358,16 @@ int BotExpandChatMessage(char *outmessage, char *message, unsigned long mcontext
 					if (!ptr)
 					{
 						botimport.Print(PRT_ERROR, "BotConstructChat: unknown random string %s\n", temp);
-						return qfalse;
+						return false;
 					} //end if
 					if (len + strlen(ptr) >= MAX_MESSAGE_SIZE)
 					{
 						botimport.Print(PRT_ERROR, "BotConstructChat: message \"%s\" too long\n", message);
-						return qfalse;
+						return false;
 					} //end if
 					strcpy(&outputbuf[len], ptr);
 					len += strlen(ptr);
-					expansion = qtrue;
+					expansion = true;
 					break;
 				} //end case
 				default:
@@ -2572,11 +2582,9 @@ void BotInitialChat(int chatstate, char *type, int mcontext, char *var0, char *v
 		strcat(match.string, var7);
 		match.variables[7].offset = index;
 		match.variables[7].length = strlen(var7);
-		index += strlen(var7);
 	}
  	//
- 	//botimport.Print(PRT_MESSAGE, "calling BotConstructChatMessage(cs, %s, %d, match, 0, qfalse)\n", message, mcontext);
-	BotConstructChatMessage(cs, message, mcontext, &match, 0, qfalse);
+	BotConstructChatMessage(cs, message, mcontext, &match, 0, false);
 } //end of the function BotInitialChat
 //===========================================================================
 //
@@ -2635,7 +2643,7 @@ int BotReplyChat(int chatstate, char *message, int mcontext, int vcontext, char 
 	bot_chatstate_t *cs;
 
 	cs = BotChatStateFromHandle(chatstate);
-	if (!cs) return qfalse;
+	if (!cs) return false;
 	Com_Memset(&match, 0, sizeof(bot_match_t));
 	strcpy(match.string, message);
 	bestpriority = -1;
@@ -2644,24 +2652,24 @@ int BotReplyChat(int chatstate, char *message, int mcontext, int vcontext, char 
 	//go through all the reply chats
 	for (rchat = replychats; rchat; rchat = rchat->next)
 	{
-		found = qfalse;
+		found = false;
 		for (key = rchat->keys; key; key = key->next)
 		{
-			res = qfalse;
+			res = false;
 			//get the match result
-			if (key->flags & RCKFL_NAME) res = (StringContains(message, cs->name, qfalse) != -1);
-			else if (key->flags & RCKFL_BOTNAMES) res = (StringContains(key->string, cs->name, qfalse) != -1);
+			if (key->flags & RCKFL_NAME) res = (StringContains(message, cs->name, false) != -1);
+			else if (key->flags & RCKFL_BOTNAMES) res = (StringContains(key->string, cs->name, false) != -1);
 			else if (key->flags & RCKFL_GENDERFEMALE) res = (cs->gender == CHAT_GENDERFEMALE);
 			else if (key->flags & RCKFL_GENDERMALE) res = (cs->gender == CHAT_GENDERMALE);
 			else if (key->flags & RCKFL_GENDERLESS) res = (cs->gender == CHAT_GENDERLESS);
 			else if (key->flags & RCKFL_VARIABLES) res = StringsMatch(key->match, &match);
-			else if (key->flags & RCKFL_STRING) res = (StringContainsWord(message, key->string, qfalse) != NULL);
+			else if (key->flags & RCKFL_STRING) res = (StringContainsWord(message, key->string, false) != NULL);
 			//if the key must be present
 			if (key->flags & RCKFL_AND)
 			{
 				if (!res)
 				{
-					found = qfalse;
+					found = false;
 					break;
 				} //end if
 			} //end else if
@@ -2670,13 +2678,13 @@ int BotReplyChat(int chatstate, char *message, int mcontext, int vcontext, char 
 			{
 				if (res)
 				{
-					found = qfalse;
+					found = false;
 					break;
 				} //end if
 			} //end if
 			else if (res)
 			{
-				found = qtrue;
+				found = true;
 			} //end else
 		} //end for
 		//
@@ -2756,13 +2764,12 @@ int BotReplyChat(int chatstate, char *message, int mcontext, int vcontext, char 
 			strcat(bestmatch.string, var7);
 			bestmatch.variables[7].offset = index;
 			bestmatch.variables[7].length = strlen(var7);
-			index += strlen(var7);
 		}
 		if (LibVarGetValue("bot_testrchat"))
 		{
 			for (m = bestrchat->firstchatmessage; m; m = m->next)
 			{
-				BotConstructChatMessage(cs, m->chatmessage, mcontext, &bestmatch, vcontext, qtrue);
+				BotConstructChatMessage(cs, m->chatmessage, mcontext, &bestmatch, vcontext, true);
 				BotRemoveTildes(cs->chatmessage);
 				botimport.Print(PRT_MESSAGE, "%s\n", cs->chatmessage);
 			} //end if
@@ -2770,11 +2777,11 @@ int BotReplyChat(int chatstate, char *message, int mcontext, int vcontext, char 
 		else
 		{
 			bestchatmessage->time = AAS_Time() + CHATMESSAGE_RECENTTIME;
-			BotConstructChatMessage(cs, bestchatmessage->chatmessage, mcontext, &bestmatch, vcontext, qtrue);
+			BotConstructChatMessage(cs, bestchatmessage->chatmessage, mcontext, &bestmatch, vcontext, true);
 		} //end else
-		return qtrue;
+		return true;
 	} //end if
-	return qfalse;
+	return false;
 } //end of the function BotReplyChat
 //===========================================================================
 //
@@ -2812,13 +2819,13 @@ void BotEnterChat(int chatstate, int clientto, int sendto)
 		else {
 			switch(sendto) {
 				case CHAT_TEAM:
-					EA_Command(cs->client, va("say_team %s", cs->chatmessage));
+					EA_Command(cs->client, (char *)va("say_team %s", cs->chatmessage));
 					break;
 				case CHAT_TELL:
-					EA_Command(cs->client, va("tell %d %s", clientto, cs->chatmessage));
+					EA_Command(cs->client, (char *)va("tell %d %s", clientto, cs->chatmessage));
 					break;
 				default: //CHAT_ALL
-					EA_Command(cs->client, va("say %s", cs->chatmessage));
+					EA_Command(cs->client, (char *)va("say %s", cs->chatmessage));
 					break;
 			}
 		}
@@ -2878,7 +2885,7 @@ void BotSetChatName(int chatstate, char *name, int client)
 	if (!cs) return;
 	cs->client = client;
 	Com_Memset(cs->name, 0, sizeof(cs->name));
-	strncpy(cs->name, name, sizeof(cs->name));
+	strncpy(cs->name, name, sizeof(cs->name)-1);
 	cs->name[sizeof(cs->name)-1] = '\0';
 } //end of the function BotSetChatName
 //===========================================================================
@@ -2914,7 +2921,7 @@ int BotAllocChatState(void)
 	{
 		if (!botchatstates[i])
 		{
-			botchatstates[i] = GetClearedMemory(sizeof(bot_chatstate_t));
+			botchatstates[i] = (bot_chatstate_t *)GetClearedMemory(sizeof(bot_chatstate_t));
 			return i;
 		} //end if
 	} //end for
@@ -2928,7 +2935,6 @@ int BotAllocChatState(void)
 //========================================================================
 void BotFreeChatState(int handle)
 {
-	bot_chatstate_t *cs;
 	bot_consolemessage_t m;
 	int h;
 
@@ -2942,7 +2948,6 @@ void BotFreeChatState(int handle)
 		botimport.Print(PRT_FATAL, "invalid chat state %d\n", handle);
 		return;
 	} //end if
-	cs = botchatstates[handle];
 	if (LibVarGetValue("bot_reloadcharacters"))
 	{
 		BotFreeChatFile(handle);

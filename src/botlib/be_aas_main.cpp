@@ -1,4 +1,4 @@
-/* r_debugSurface
+/*
 ===========================================================================
 Copyright (C) 1999-2005 Id Software, Inc.
 Copyright (C) 2000-2006 Tim Angus
@@ -55,106 +55,16 @@ libvar_t *saveroutingcache;
 // Returns:					-
 // Changes Globals:		-
 //===========================================================================
-void QDECL AAS_Error(char *fmt, ...)
+void QDECL AAS_Error(const char *fmt, ...)
 {
 	char str[1024];
 	va_list arglist;
 
 	va_start(arglist, fmt);
-	vsprintf(str, fmt, arglist);
+	Q_vsnprintf(str, sizeof(str), fmt, arglist);
 	va_end(arglist);
-	botimport.Print(PRT_FATAL, str);
+	botimport.Print(PRT_FATAL, "%s", str);
 } //end of the function AAS_Error
-//===========================================================================
-//
-// Parameter:				-
-// Returns:					-
-// Changes Globals:		-
-//===========================================================================
-char *AAS_StringFromIndex(char *indexname, char *stringindex[], int numindexes, int index)
-{
-	if (!aasworld.indexessetup)
-	{
-		botimport.Print(PRT_ERROR, "%s: index %d not setup\n", indexname, index);
-		return "";
-	} //end if
-	if (index < 0 || index >= numindexes)
-	{
-		botimport.Print(PRT_ERROR, "%s: index %d out of range\n", indexname, index);
-		return "";
-	} //end if
-	if (!stringindex[index])
-	{
-		if (index)
-		{
-			botimport.Print(PRT_ERROR, "%s: reference to unused index %d\n", indexname, index);
-		} //end if
-		return "";
-	} //end if
-	return stringindex[index];
-} //end of the function AAS_StringFromIndex
-//===========================================================================
-//
-// Parameter:				-
-// Returns:					-
-// Changes Globals:		-
-//===========================================================================
-int AAS_IndexFromString(char *indexname, char *stringindex[], int numindexes, char *string)
-{
-	int i;
-	if (!aasworld.indexessetup)
-	{
-		botimport.Print(PRT_ERROR, "%s: index not setup \"%s\"\n", indexname, string);
-		return 0;
-	} //end if
-	for (i = 0; i < numindexes; i++)
-	{
-		if (!stringindex[i]) continue;
-		if (!Q_stricmp(stringindex[i], string)) return i;
-	} //end for
-	return 0;
-} //end of the function AAS_IndexFromString
-//===========================================================================
-//
-// Parameter:				-
-// Returns:					-
-// Changes Globals:		-
-//===========================================================================
-char *AAS_ModelFromIndex(int index)
-{
-	return AAS_StringFromIndex("ModelFromIndex", &aasworld.configstrings[CS_MODELS], MAX_MODELS, index);
-} //end of the function AAS_ModelFromIndex
-//===========================================================================
-//
-// Parameter:				-
-// Returns:					-
-// Changes Globals:		-
-//===========================================================================
-int AAS_IndexFromModel(char *modelname)
-{
-	return AAS_IndexFromString("IndexFromModel", &aasworld.configstrings[CS_MODELS], MAX_MODELS, modelname);
-} //end of the function AAS_IndexFromModel
-//===========================================================================
-//
-// Parameter:				-
-// Returns:					-
-// Changes Globals:		-
-//===========================================================================
-void AAS_UpdateStringIndexes(int numconfigstrings, char *configstrings[])
-{
-	int i;
-	//set string pointers and copy the strings
-	for (i = 0; i < numconfigstrings; i++)
-	{
-		if (configstrings[i])
-		{
-			//if (aasworld.configstrings[i]) FreeMemory(aasworld.configstrings[i]);
-			aasworld.configstrings[i] = (char *) GetMemory(strlen(configstrings[i]) + 1);
-			strcpy(aasworld.configstrings[i], configstrings[i]);
-		} //end if
-	} //end for
-	aasworld.indexessetup = qtrue;
-} //end of the function AAS_UpdateStringIndexes
 //===========================================================================
 //
 // Parameter:				-
@@ -183,7 +93,7 @@ int AAS_Initialized(void)
 //===========================================================================
 void AAS_SetInitialized(void)
 {
-	aasworld.initialized = qtrue;
+	aasworld.initialized = true;
 	botimport.Print(PRT_MESSAGE, "AAS initialized.\n");
 #ifdef DEBUG
 	//create all the routing cache
@@ -217,7 +127,7 @@ void AAS_ContinueInit(float time)
 		//save the AAS file
 		if (AAS_WriteAASFile(aasworld.filename))
 		{
-			botimport.Print(PRT_MESSAGE, "%s written succesfully\n", aasworld.filename);
+			botimport.Print(PRT_MESSAGE, "%s written successfully\n", aasworld.filename);
 		} //end if
 		else
 		{
@@ -229,69 +139,6 @@ void AAS_ContinueInit(float time)
 	//at this point AAS is initialized
 	AAS_SetInitialized();
 } //end of the function AAS_ContinueInit
-
-void ShowReachesFrom(void){
-	int reachnum, areanum;
-	aas_reachability_t reach;
-	vec3_t origin;
-	aas_entityinfo_t entinfo;
-
-	// client0 position
-	AAS_EntityInfo(0, &entinfo);
-	areanum = AAS_PointAreaNum(entinfo.origin);
-
-	VectorCopy(entinfo.origin, origin);
-	origin[2] -= 20;	// player height... how much is it?
-	
-	botimport.Print(PRT_MESSAGE, " from area %d \n", areanum);
-
-	if(!areanum) return;
-	for (reachnum = AAS_NextAreaReachability(areanum, 0); reachnum;
-		reachnum = AAS_NextAreaReachability(areanum, reachnum)){
-		
-		AAS_ReachabilityFromNum(reachnum, &reach);
-		
-		//AAS_DrawArrow(entinfo.origin, reach.start, LINECOLOR_BLUE, LINECOLOR_YELLOW);
-		AAS_DebugLine(origin, reach.start, LINECOLOR_YELLOW);
-		AAS_ShowReachability(&reach);
-		AAS_ShowArea(reach.areanum, qtrue);
-
-		//botimport.Print(PRT_MESSAGE, " towards area %d \n", reach.areanum);
-	}
-}
-
-void ShowReachesTo(void){
-	int areanum;
-	aas_reachability_t* reach;
-//	vec3_t origin;
-	aas_entityinfo_t entinfo;
-	int linknum;
-	aas_reversedreachability_t *revreach;
-    aas_reversedlink_t *revlink;
-
-	// client0 position
-	AAS_EntityInfo(0, &entinfo);
-	areanum = AAS_PointAreaNum(entinfo.origin);
-	
-	//botimport.Print(PRT_MESSAGE, " reaches to %d: %d %d %d \n", areanum, entinfo.origin[0], entinfo.origin[1], entinfo.origin[2]);
-
-	if(!areanum) return;
-	// iterate over all 
-	revreach = &aasworld.reversedreachability[areanum];
-        //
-        for (revlink = revreach->first; revlink; revlink = revlink->next){
-        	linknum = revlink->linknum;
-            reach = &aasworld.reachability[linknum];
-
-			//AAS_DrawArrow(entinfo.origin, reach->end, LINECOLOR_BLUE, LINECOLOR_YELLOW);
-			AAS_DebugLine(entinfo.origin, reach->end, LINECOLOR_BLUE);
-			AAS_ShowReachability(reach);
-			AAS_ShowArea(revlink->areanum, qtrue);
-
-			//botimport.Print(PRT_MESSAGE, " from area %d \n", revlink->areanum);
-        }
-}
-
 //===========================================================================
 // called at the start of every frame
 //
@@ -311,7 +158,7 @@ int AAS_StartFrame(float time)
 	//
 	aasworld.frameroutingupdates = 0;
 	//
-	if (bot_developer)
+	if (botDeveloper)
 	{
 		if (LibVarGetValue("showcacheupdates"))
 		{
@@ -329,20 +176,6 @@ int AAS_StartFrame(float time)
 			LibVarSet("memorydump", "0");
 		} //end if
 	} //end if
-	
-			if ( LibVarGetValue("showreachesfrom") ){
-			//botimport.Print(PRT_MESSAGE, " from \n");
-			AAS_ClearShownPolygons();
-			AAS_ClearShownDebugLines();
-			ShowReachesFrom();
-		}
-
-		if ( LibVarGetValue("showreachesto") ){
-			AAS_ClearShownPolygons();
-			AAS_ClearShownDebugLines();
-			ShowReachesTo();
-		}	
-
 	//
 	if (saveroutingcache->value)
 	{
@@ -388,10 +221,9 @@ void AAS_ProjectPointOntoVector( vec3_t point, vec3_t vStart, vec3_t vEnd, vec3_
 int AAS_LoadFiles(const char *mapname)
 {
 	int errnum;
-	char aasfile[MAX_PATH];
-//	char bspfile[MAX_PATH];
+	char aasfile[MAX_QPATH];
 
-	strcpy(aasworld.mapname, mapname);
+	Q_strncpyz(aasworld.mapname, mapname, sizeof(aasworld.mapname));
 	//NOTE: first reset the entity links into the AAS areas and BSP leaves
 	// the AAS link heap and BSP link heap are reset after respectively the
 	// AAS file and BSP file are loaded
@@ -400,17 +232,17 @@ int AAS_LoadFiles(const char *mapname)
 	AAS_LoadBSPFile();
 
 	//load the aas file
-	Com_sprintf(aasfile, MAX_PATH, "maps/%s.aas", mapname);
+	Com_sprintf(aasfile, sizeof(aasfile), "maps/%s.aas", mapname);
 	errnum = AAS_LoadAASFile(aasfile);
 	if (errnum != BLERR_NOERROR)
 		return errnum;
 
 	botimport.Print(PRT_MESSAGE, "loaded %s\n", aasfile);
-	strncpy(aasworld.filename, aasfile, MAX_PATH);
+	Q_strncpyz(aasworld.filename, aasfile, sizeof(aasworld.filename));
 	return BLERR_NOERROR;
 } //end of the function AAS_LoadFiles
 //===========================================================================
-// called everytime a map changes
+// called every time a map changes
 //
 // Parameter:				-
 // Returns:					-
@@ -426,7 +258,7 @@ int AAS_LoadMap(const char *mapname)
 		return 0;
 	} //end if
 	//
-	aasworld.initialized = qfalse;
+	aasworld.initialized = false;
 	//NOTE: free the routing caches before loading a new map because
 	// to free the caches the old number of areas, number of clusters
 	// and number of areas in a clusters must be available
@@ -435,7 +267,7 @@ int AAS_LoadMap(const char *mapname)
 	errnum = AAS_LoadFiles(mapname);
 	if (errnum != BLERR_NOERROR)
 	{
-		aasworld.loaded = qfalse;
+		aasworld.loaded = false;
 		return errnum;
 	} //end if
 	//
@@ -499,9 +331,9 @@ void AAS_Shutdown(void)
 	//clear the aasworld structure
 	Com_Memset(&aasworld, 0, sizeof(aas_t));
 	//aas has not been initialized
-	aasworld.initialized = qfalse;
+	aasworld.initialized = false;
 	//NOTE: as soon as a new .bsp file is loaded the .bsp file memory is
-	// freed an reallocated, so there's no need to free that memory here
+	// freed and reallocated, so there's no need to free that memory here
 	//print shutdown
 	botimport.Print(PRT_MESSAGE, "AAS shutdown.\n");
 } //end of the function AAS_Shutdown

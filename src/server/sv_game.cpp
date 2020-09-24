@@ -461,9 +461,9 @@ intptr_t SV_GameSystemCalls( intptr_t *args ) {
 	case BOTLIB_SHUTDOWN:
 		return SV_BotLibShutdown();
 	case BOTLIB_LIBVAR_SET:
-		return botlib_export->BotLibVarSet( (char*)VMA(1), (char*)VMA(2) );
+		return botlib_export->BotLibVarSet( (const char*)VMA(1), (const char*)VMA(2) );
 	case BOTLIB_LIBVAR_GET:
-		return botlib_export->BotLibVarGet( (char*)VMA(1), (char*)VMA(2), args[3] );
+		return botlib_export->BotLibVarGet( (const char*)VMA(1), (char*)VMA(2), args[3] );
 
 	case BOTLIB_PC_ADD_GLOBAL_DEFINE:
 		return botlib_export->PC_AddGlobalDefine( (char*)VMA(1) );
@@ -523,13 +523,13 @@ intptr_t SV_GameSystemCalls( intptr_t *args ) {
 	case BOTLIB_AAS_NEXT_BSP_ENTITY:
 		return botlib_export->aas.AAS_NextBSPEntity( args[1] );
 	case BOTLIB_AAS_VALUE_FOR_BSP_EPAIR_KEY:
-		return botlib_export->aas.AAS_ValueForBSPEpairKey( args[1], (char*)VMA(2), (char*)VMA(3), args[4] );
+		return botlib_export->aas.AAS_ValueForBSPEpairKey( args[1], (const char*)VMA(2), (char*)VMA(3), args[4] );
 	case BOTLIB_AAS_VECTOR_FOR_BSP_EPAIR_KEY:
-		return botlib_export->aas.AAS_VectorForBSPEpairKey( args[1], (char*)VMA(2), (vec_t*)VMA(3) );
+		return botlib_export->aas.AAS_VectorForBSPEpairKey( args[1], (const char*)VMA(2), (vec_t*)VMA(3) );
 	case BOTLIB_AAS_FLOAT_FOR_BSP_EPAIR_KEY:
-		return botlib_export->aas.AAS_FloatForBSPEpairKey( args[1], (char*)VMA(2), (float*)VMA(3) );
+		return botlib_export->aas.AAS_FloatForBSPEpairKey( args[1], (const char*)VMA(2), (float*)VMA(3) );
 	case BOTLIB_AAS_INT_FOR_BSP_EPAIR_KEY:
-		return botlib_export->aas.AAS_IntForBSPEpairKey( args[1], (char*)VMA(2), (int*)VMA(3) );
+		return botlib_export->aas.AAS_IntForBSPEpairKey( args[1], (const char*)VMA(2), (int*)VMA(3) );
 
 	case BOTLIB_AAS_AREA_REACHABILITY:
 		return botlib_export->aas.AAS_AreaReachability( args[1] );

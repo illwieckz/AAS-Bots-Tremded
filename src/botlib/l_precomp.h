@@ -30,10 +30,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  *****************************************************************************/
 
-#ifndef MAX_PATH
-	#define MAX_PATH			MAX_QPATH
-#endif
-
 #ifndef PATH_SEPERATORSTR
 	#if defined(WIN32)|defined(_WIN32)|defined(__NT__)|defined(__WINDOWS__)|defined(__WINDOWS_386__)
 		#define PATHSEPERATOR_STR		"\\"
@@ -111,14 +107,14 @@ typedef struct source_s
 //read a token from the source
 int PC_ReadToken(source_t *source, token_t *token);
 //expect a certain token
-int PC_ExpectTokenString(source_t *source, char *string);
+int PC_ExpectTokenString(source_t *source, const char *string);
 //expect a certain token type
 int PC_ExpectTokenType(source_t *source, int type, int subtype, token_t *token);
 //expect a token
 int PC_ExpectAnyToken(source_t *source, token_t *token);
 //returns true when the token is available
-int PC_CheckTokenString(source_t *source, char *string);
-//returns true an reads the token when a token with the given type is available
+int PC_CheckTokenString(source_t *source, const char *string);
+//returns true and reads the token when a token with the given type is available
 int PC_CheckTokenType(source_t *source, int type, int subtype, token_t *token);
 //skip tokens until the given token string is read
 int PC_SkipUntilString(source_t *source, char *string);
@@ -145,7 +141,7 @@ void PC_SetIncludePath(source_t *source, char *path);
 //set the punction set
 void PC_SetPunctuations(source_t *source, punctuation_t *p);
 //set the base folder to load files from
-void PC_SetBaseFolder(char *path);
+void PC_SetBaseFolder(const char *path);
 //load a source file
 source_t *LoadSourceFile(const char *filename);
 //load a source from memory
@@ -153,9 +149,9 @@ source_t *LoadSourceMemory(char *ptr, int length, char *name);
 //free the given source
 void FreeSource(source_t *source);
 //print a source error
-void QDECL SourceError(source_t *source, char *str, ...);
+void QDECL SourceError(source_t *source, const char *str, ...) __attribute__ ((format (printf, 2, 3))); //Auriga: ERRORS!!
 //print a source warning
-void QDECL SourceWarning(source_t *source, char *str, ...);
+void QDECL SourceWarning(source_t *source, const char *str, ...)  __attribute__ ((format (printf, 2, 3)));
 
 #ifdef BSPC
 // some of BSPC source does include game/q_shared.h and some does not
