@@ -147,7 +147,7 @@ typedef struct {
 	void	(*Cmd_RemoveCommand)( const char *name );
 
 	int		(*Cmd_Argc) (void);
-	const char* (*Cmd_Argv) (int i);
+	char* (*Cmd_Argv) (int i);
 
 	void	(*Cmd_ExecuteText) (int exec_when, const char *text);
 
