@@ -1,70 +1,74 @@
 #
-##    ____                                      _      
-##   / ___| __ _ _ __ ___   ___    ___ ___   __| | ___ 
-##  | |  _ / _` | '_ ` _ \ / _ \  / __/ _ \ / _` |/ _ \
-##  | |_| | (_| | | | | | |  __/ | (_| (_) | (_| |  __/
-##   \____|\__,_|_| |_| |_|\___|  \___\___/ \__,_|\___|
-##                                                     
+##  ___        ___        ____
+## /   `\     /   `\     (
+## |    |     |    |      `--.
+## `.__/ \_   `.__/ \_   \___.'
+##
 #
 
-set(CMAKE_INSTALL_NAME_DIR ${PROJECT_BINARY_DIR}/gpp)
-
-set(QC_SOURCE_DIR ../qcommon)
-#set(RC_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../renderercommon)
-#set(CLIENT_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../client)
-
-add_definitions( -DGAME )
-
-set( GAME_SOURCES
-    g_main.c # Must be listed first!
-    bg_alloc.c
-    bg_lib.c
-    bg_lib.h
-    bg_local.h
-    bg_misc.c
-    bg_pmove.c
-    bg_public.h
-    bg_slidemove.c
-    bg_voice.c
-    g_active.c
-    g_admin.c
-    g_admin.h
-    g_buildable.c
-    g_client.c
-    g_cmds.c
-    g_combat.c
-    g_local.h
-    g_maprotation.c
-    g_misc.c
-    g_missile.c
-    g_mover.c
-    g_namelog.c
-    g_physics.c
-    g_playermodel.c
-    g_public.h
-    g_session.c
-    g_spawn.c
-    g_svcmds.c
-    g_target.c
-    g_team.c
-    g_trigger.c
-    g_utils.c
-    g_weapon.c
-    g_weapondrop.c
-    tremulous.h
-    ${QC_SOURCE_DIR}/q_shared.h 
-    ${QC_SOURCE_DIR}/q_shared.c
-    ${QC_SOURCE_DIR}/q_math.c
+set( BOTLIB_SOURCES
+    aasfile.h
+    be_aas_bsp.h
+    be_aas_bspq3.c
+    be_aas_cluster.c
+    be_aas_cluster.h
+    be_aas_debug.c
+    be_aas_debug.h
+    be_aas_def.h
+    be_aas_entity.c
+    be_aas_entity.h
+    be_aas_file.c
+    be_aas_file.h
+    be_aas_funcs.h
+    be_aas.h
+    be_aas_main.c
+    be_aas_main.h
+    be_aas_move.c
+    be_aas_move.h
+    be_aas_optimize.c
+    be_aas_optimize.h
+    be_aas_reach.c
+    be_aas_reach.h
+    be_aas_routealt.c
+    be_aas_routealt.h
+    be_aas_route.c
+    be_aas_route.h
+    be_aas_sample.c
+    be_aas_sample.h
+    be_ai_char.c
+    be_ai_char.h
+    be_ai_chat.c
+    be_ai_chat.h
+    be_ai_gen.c
+    be_ai_gen.h
+    be_ai_goal.c
+    be_ai_goal.h
+    be_ai_move.c
+    be_ai_move.h
+    be_ai_weap.c
+    be_ai_weap.h
+    be_ai_weight.c
+    be_ai_weight.h
+    be_ea.c
+    be_ea.h
+    be_interface.c
+    be_interface.h
+    botlib.h
+    l_crc.c
+    l_crc.h
+    l_libvar.c
+    l_libvar.h
+    l_log.c
+    l_log.h
+    l_memory.c
+    l_memory.h
+    l_precomp.c
+    l_precomp.h
+    l_script.c
+    l_script.h
+    l_struct.c
+    l_struct.h
+    l_utils.h
     )
 
-add_library( game SHARED ${GAME_SOURCES} g_syscalls.c )
-
-include( ${CMAKE_SOURCE_DIR}/cmake/AddQVM.cmake )
-add_qvm( game ${GAME_SOURCES} g_syscalls.asm )
-
-add_custom_command(
-    TARGET game POST_BUILD
-    COMMAND ${CMAKE_COMMAND}
-    ARGS -E copy ${CMAKE_CURRENT_BINARY_DIR}/libgame${CMAKE_SHARED_LIBRARY_SUFFIX} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/gpp/game${CMAKE_SHARED_LIBRARY_SUFFIX}
-    )
-
+add_library( botlib STATIC ${BOTLIB_SOURCES} )

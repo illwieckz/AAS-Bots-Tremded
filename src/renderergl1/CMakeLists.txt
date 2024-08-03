@@ -8,6 +8,8 @@ include_directories(
     ${SDL2_INCLUDE_DIRS} 
     )
 
+set(QC_SOURCE_DIR ../qcommon)
+
 set(renderergl1_SRCS
     tr_animation.cpp
     tr_backend.cpp
@@ -34,9 +36,9 @@ set(renderergl1_SRCS
     tr_surface.cpp
     tr_world.cpp
     tr_local.h
-    ${CMAKE_SOURCE_DIR}/src/common/puff.cpp
-    ${CMAKE_SOURCE_DIR}/src/common/q_shared.c
-    ${CMAKE_SOURCE_DIR}/src/common/q_math.c
+    ${QC_SOURCE_DIR}/puff.cpp
+    ${QC_SOURCE_DIR}/q_shared.c
+    ${QC_SOURCE_DIR}/q_math.c
     )
 
 if(NOT USE_RENDERER_DLOPEN)

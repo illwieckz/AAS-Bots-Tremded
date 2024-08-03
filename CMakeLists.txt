@@ -40,6 +40,9 @@ option(USE_RESTCLIENT "" ON)
 include(${CMAKE_SOURCE_DIR}/cmake/build_dir)
 include(${CMAKE_SOURCE_DIR}/cmake/debug_cflags)
 
+# for "qcommon/q_shared.h" to be found from everywhere
+include_directories( src )
+
 # builtins 
 add_subdirectory(external/SDL2)
 add_subdirectory(external/lua-5.3.3)
@@ -59,6 +62,14 @@ add_subdirectory(src/script)
 add_subdirectory(src/renderercommon)
 add_subdirectory(src/renderergl1)
 add_subdirectory(src/renderergl2)
+
+#  ___        ___        ____
+# /   `\     /   `\     (
+# |    |     |    |      `--.
+# `.__/ \_   `.__/ \_   \___.'
+#
+
+add_subdirectory(src/botlib)
 
 #         .                    .
 #   ___   |   `   ___  , __   _/_
@@ -130,14 +141,6 @@ add_subdirectory(src/cgame)
 #        /     / ) / (_(_(_/ (_(_/__(/_/ (_) /   (__(_(_/_)  o  (__(_) // (_
 #       (____ /               .-/         (_/
 #                            (_/
-
-add_subdirectory(src/botlib)
-
-#  ___        ___        ____
-# /   `\     /   `\     (
-# |    |     |    |      `--. 
-# `.__/ \_   `.__/ \_   \___.'
-#   
 
 # Author: Victor Roemer  wtfbbqhax, <victor@badsec.org>. 
 #  Date: Sat Nov  5 06:49:08 2016 

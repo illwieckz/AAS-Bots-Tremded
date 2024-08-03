@@ -26,6 +26,7 @@ add_executable(
     #
     server.h
     #
+    sv_bot.cpp
     sv_ccmds.cpp
     sv_client.cpp
     sv_game.cpp
@@ -96,6 +97,7 @@ endif(APPLE)
 target_link_libraries(
     tremded
     #
+    botlib
     lua
     script_api
     nettle

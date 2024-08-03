@@ -99,6 +99,7 @@ add_executable(
     ${PARENT_DIR}/sdl/sdl_input.cpp
     ${PARENT_DIR}/sdl/sdl_snd.cpp
     #
+    ${PARENT_DIR}/server/sv_bot.cpp
     ${PARENT_DIR}/server/sv_ccmds.cpp
     ${PARENT_DIR}/server/sv_client.cpp
     ${PARENT_DIR}/server/sv_game.cpp
@@ -145,6 +146,7 @@ target_link_libraries(
     opus
     opusfile
     #
+    botlib
     script_api
     restclient
     #

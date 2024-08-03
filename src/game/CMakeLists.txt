@@ -58,9 +58,10 @@ set( GAME_SOURCES
     )
 
 add_library( game SHARED ${GAME_SOURCES} g_syscalls.c )
+target_link_libraries( game botlib )
 
 include( ${CMAKE_SOURCE_DIR}/cmake/AddQVM.cmake )
-add_qvm( game ${GAME_SOURCES} g_syscalls.asm )
+add_qvm( game ${GAME_SOURCES} ${BOTLIB_SOURCES} g_syscalls.asm )
 
 add_custom_command(
     TARGET game POST_BUILD
