@@ -24,6 +24,8 @@
 #ifndef _LIBMUMBLELINK_H_
 #define _LIBMUMBLELINK_H_
 
+#include <stddef.h>
+
 int mumble_link(const char* name);
 int mumble_islinked(void);
 void mumble_update_coordinates(float fPosition[3], float fFront[3], float fTop[3]);
