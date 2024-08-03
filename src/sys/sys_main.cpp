@@ -44,7 +44,7 @@ along with Tremulous; if not, see <https://www.gnu.org/licenses/>
 #include <iostream>
 
 #include "lua.hpp"
-#include "sol.hpp"
+#include "sol_wrapper.hpp"
 #ifndef DEDICATED
 #ifdef USE_LOCAL_HEADERS
 # include "SDL.h"
