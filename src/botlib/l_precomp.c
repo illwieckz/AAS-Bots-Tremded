@@ -104,7 +104,7 @@ typedef struct directive_s
 
 #define TOKEN_HEAP_SIZE		4096
 
-int numtokens;
+static int numtokens;
 /*
 int tokenheapinitialized;				//true when the token heap is initialized
 token_t token_heap[TOKEN_HEAP_SIZE];	//heap with tokens
@@ -112,7 +112,7 @@ token_t *freetokens;					//free tokens from the heap
 */
 
 //list with global defines added to every source loaded
-define_t *globaldefines;
+static define_t *globaldefines;
 
 //============================================================================
 //
@@ -3114,7 +3114,7 @@ void FreeSource(source_t *source)
 
 #define MAX_SOURCEFILES		64
 
-source_t *sourceFiles[MAX_SOURCEFILES];
+static source_t *sourceFiles[MAX_SOURCEFILES];
 
 int PC_LoadSourceHandle(const char *filename)
 {

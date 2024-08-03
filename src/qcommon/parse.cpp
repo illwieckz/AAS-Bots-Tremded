@@ -238,10 +238,10 @@ typedef struct directive_s
 static bool Parse_ReadToken(source_t *source, token_t *token);
 static bool Parse_AddDefineToSourceFromString( source_t *source, const char *string );
 
-int numtokens;
+static int numtokens;
 
 //list with global defines added to every source loaded
-define_t *globaldefines;
+static define_t *globaldefines;
 
 //longer punctuations first
 punctuation_t default_punctuations[] =
@@ -3635,7 +3635,7 @@ static void Parse_FreeSource(source_t *source)
 
 #define MAX_SOURCEFILES   64
 
-source_t *sourceFiles[MAX_SOURCEFILES];
+static source_t *sourceFiles[MAX_SOURCEFILES];
 
 /*
 ===============
